@@ -1,0 +1,23 @@
+{
+    "name":  "spendoptimo-infra",
+    "version":  "0.2.0",
+    "private":  true,
+    "scripts":  {
+                    "build":  "tsc",
+                    "cdk":  "cdk",
+                    "write-env":  "node scripts/write-env-from-outputs.js"
+                },
+    "dependencies":  {
+                         "@aws-sdk/client-bedrock-agent":  "^3.901.0",
+                         "@aws-sdk/client-cloudformation":  "^3.616.0",
+                         "aws-crt":  "^1.27.3",
+                         "@aws-cdk/aws-lambda-python-alpha":  "^2.218.0-alpha.0"
+                     },
+    "devDependencies":  {
+                            "@types/aws-lambda":  "^8.10.153",
+                            "aws-cdk-lib":  "^2.218.0",
+                            "constructs":  "^10.3.0",
+                            "esbuild":  "^0.25.10",
+                            "typescript":  "5.4.5"
+                        }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "spendoptimo",
+  "version": "1.0.0",
+  "description": "SpendOptimo - Autonomous FinOps Agent on AWS",
+  "scripts": {
+    "deploy:ui": "node deploy-ui.js",
+    "deploy:agentcore": "node deploy-enhanced-agent.js",
+    "deploy:all": "npm run deploy:agentcore && npm run deploy:ui",
+    "build:ui": "cd webapp && npm run build",
+    "dev:ui": "cd webapp && npm run dev"
+  },
+  "devDependencies": {
+    "child_process": "^1.0.2"
+  }
+}
+

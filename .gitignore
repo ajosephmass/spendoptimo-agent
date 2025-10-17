@@ -1,0 +1,267 @@
+# ============================================
+# SpendOptimo - Git Ignore Configuration
+# ============================================
+
+# ============================================
+# Dependencies & Package Managers
+# ============================================
+node_modules/
+package-lock.json.backup
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+pip-log.txt
+pip-delete-this-directory.txt
+*.egg-info/
+dist/
+build/
+
+# ============================================
+# Build Artifacts
+# ============================================
+# CDK
+cdk.out/
+cdk.context.json
+*.js.map
+*.d.ts.map
+
+# TypeScript
+dist/
+*.tsbuildinfo
+
+# Frontend (Vite/React)
+webapp/dist/
+webapp/.vite/
+webapp/.cache/
+
+# ============================================
+# AWS & Infrastructure
+# ============================================
+# CloudFormation templates (auto-generated)
+*.template.json
+*.template.yaml
+
+# CDK asset staging
+.cdk.staging/
+cdk-outputs.json
+
+# AWS SAM
+.aws-sam/
+
+# Terraform (if used)
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# ============================================
+# Environment & Secrets
+# ============================================
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+*.local
+
+# AWS credentials (should never be in repo)
+.aws/credentials
+aws-exports.js
+
+# ============================================
+# IDE & Editor Files
+# ============================================
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+
+# ============================================
+# Operating System Files
+# ============================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+.directory
+.Trash-*
+
+# ============================================
+# Archive & Temporary Files
+# ============================================
+archive/
+*.backup
+*.bak
+*.tmp
+*.temp
+*.old
+*.orig
+
+# ============================================
+# Logs
+# ============================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.npm
+.pnpm-debug.log*
+
+# ============================================
+# Testing & Coverage
+# ============================================
+coverage/
+*.coverage
+.nyc_output/
+.pytest_cache/
+.tox/
+.coverage
+htmlcov/
+
+# ============================================
+# Vendor & External Dependencies
+# ============================================
+# Keep vendor Python SDKs but exclude samples and nested git repos
+vendor/agentcore-samples/
+vendor/bedrock-agentcore-sdk-python/.git/
+vendor/**/.git/
+vendor/**/.github/
+vendor/**/tests/
+vendor/**/examples/
+
+# ============================================
+# Jupyter Notebooks
+# ============================================
+.ipynb_checkpoints/
+*.ipynb
+
+# ============================================
+# Docker
+# ============================================
+*.dockerignore.swp
+
+# ============================================
+# Misc Binary/Large Files
+# ============================================
+*.exe
+*.msi
+*.dmg
+*.pkg
+*.deb
+*.rpm
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Specifically ignore AWS CLI installer
+infra/awscliv2.msi
+awscliv2.msi
+
+# ============================================
+# CDK/TypeScript Specific
+# ============================================
+# Compiled TypeScript in infra
+infra/dist/
+infra/**/*.js
+infra/**/*.d.ts
+# But keep the bin and lib files we need
+!infra/bin/*.js
+!infra/lib/*.js
+
+# CDK bundled assets
+infra/asset.*/
+
+# ============================================
+# Project-Specific
+# ============================================
+# Architecture diagrams source (if generated)
+architecture/*.pptx
+architecture/*.sketch
+
+# Old/deprecated deployment scripts (moved to archive)
+deploy-clean.js
+deploy-enhanced-agent.js
+force-update-env.js
+test-endpoints*.js
+test-gateway*.js
+test-manual.md
+
+# Sample/placeholder files
+sample_requirements.txt
+
+# Generated output files
+outputs.json
+stack-outputs.json
+
+# ============================================
+# Security & Sensitive Data
+# ============================================
+# Never commit credentials or keys
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+config.json
+secrets.json
+
+# ============================================
+# Documentation Build Artifacts
+# ============================================
+docs/_build/
+docs/.doctrees/
+site/
+
+# ============================================
+# Cache Directories
+# ============================================
+.cache/
+.parcel-cache/
+.next/
+.nuxt/
+

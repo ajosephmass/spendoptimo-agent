@@ -1,0 +1,45 @@
+{
+  "schema": "2024-09-01",
+  "name": "spendoptimo-gateway",
+  "tools": [
+    {
+      "name": "query_cost_explorer",
+      "method": "GET",
+      "url": "/v1/analyze",
+      "description": "Analyze AWS cost trends, anomalies, and optimization opportunities. Optional query params: days, groupBy, granularity, filterDimension, filterValue, forecast, anomalies, savings."
+    },
+    {
+      "name": "get_cost_anomalies",
+      "method": "GET",
+      "url": "/v1/anomalies",
+      "description": "Detect and analyze cost anomalies in AWS billing. Optional query params: startDate, endDate, dimension."
+    },
+    {
+      "name": "rightsizing_recommendations",
+      "method": "GET",
+      "url": "/v1/recommend",
+      "description": "Get Compute Optimizer recommendations for EC2, RDS, Lambda, and EBS resources. Optional query params: resourceTypes, accountIds, limit."
+    },
+    {
+      "name": "trigger_automation",
+      "method": "POST",
+      "url": "/v1/automation",
+      "description": "Execute automated FinOps workflows including rightsizing, cost optimization, and resource management. JSON body: {action, context, schedule?}."
+    },
+    {
+      "name": "get_budget_alerts",
+      "method": "GET",
+      "url": "/v1/budgets",
+      "description": "Retrieve budget information and alerts. Optional query params: budgetName, accountId."
+    },
+    {
+      "name": "optimize_reserved_instances",
+      "method": "POST",
+      "url": "/v1/ri-optimization",
+      "description": "Analyze and optimize Reserved Instance utilization and recommendations. JSON body: {analysisType, timeRange}."
+    }
+  ],
+  "auth": {
+    "type": "iam"
+  }
+}
