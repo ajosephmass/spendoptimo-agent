@@ -396,37 +396,315 @@ def execute_rightsizing_workflow() -> str:
     except Exception as e:
         return f"❌ Error executing rightsizing workflow: {str(e)}"
 
+# ===================================
+# Multi-Service Recommendation Checks
+# ===================================
+
+# FUTURE ENHANCEMENT - RDS Optimization
+# Uncomment this function to enable RDS instance optimization
+# def check_rds_instances():
+#     """Check RDS instances against company policies and return recommendations."""
+#     import boto3
+#     import re
+#     from company_policies import get_policy, get_policy_rationale
+#     
+#     recommendations = []
+#     
+#     try:
+#         rds = boto3.client('rds')
+#         response = rds.describe_db_instances()
+#         
+#         rds_policy = get_policy('rds')
+#         if not rds_policy:
+#             return []
+#         
+#         disallowed_classes = rds_policy.get('disallowed_instance_classes', [])
+#         recommended_classes = rds_policy.get('recommended_classes', [])
+#         
+#         for db in response['DBInstances']:
+#             db_identifier = db['DBInstanceIdentifier']
+#             db_class = db['DBInstanceClass']
+#             storage_type = db.get('StorageType', 'gp2')
+#             allocated_storage = db.get('AllocatedStorage', 0)
+#             
+#             # Check instance class against policy
+#             is_disallowed = False
+#             for pattern in disallowed_classes:
+#                 regex_pattern = pattern.replace(".", r"\.").replace("*", ".*")
+#                 if re.match(f"^{regex_pattern}$", db_class):
+#                     is_disallowed = True
+#                     break
+#             
+#             if is_disallowed:
+#                 recommended_class = recommended_classes[1] if len(recommended_classes) > 1 else 'db.t3.small'
+#                 recommendations.append({
+#                     "resource_type": "RDS",
+#                     "db_identifier": db_identifier,
+#                     "current_class": db_class,
+#                     "recommended_class": recommended_class,
+#                     "estimated_monthly_savings": "$30.00",
+#                     "reason": rds_policy.get('rationale', 'Policy violation - expensive instance class'),
+#                     "confidence": "Policy-Based",
+#                     "recommendation_source": "Company Cost Policy"
+#                 })
+#             
+#             # Check storage type
+#             if storage_type in rds_policy.get('storage', {}).get('disallowed_storage_types', []):
+#                 recommendations.append({
+#                     "resource_type": "RDS",
+#                     "db_identifier": db_identifier,
+#                     "current_storage_type": storage_type,
+#                     "recommended_storage_type": "gp3",
+#                     "estimated_monthly_savings": "$15.00",
+#                     "reason": "Policy violation - expensive provisioned IOPS storage",
+#                     "confidence": "Policy-Based",
+#                     "recommendation_source": "Company Cost Policy"
+#                 })
+#     
+#     except Exception as e:
+#         logger.error(f"Error checking RDS instances: {str(e)}")
+#     
+#     return recommendations
+
+
+def check_lambda_functions():
+    """Check Lambda functions against company policies and return recommendations."""
+    import boto3
+    from company_policies import get_policy
+    
+    recommendations = []
+    
+    try:
+        lambda_client = boto3.client('lambda')
+        response = lambda_client.list_functions(MaxItems=100)
+        
+        total_functions = len(response['Functions'])
+        logger.info(f"Found {total_functions} Lambda functions to analyze")
+        
+        lambda_policy = get_policy('lambda')
+        if not lambda_policy:
+            logger.warning("No Lambda policy found")
+            return []
+        
+        max_concurrency = lambda_policy.get('reserved_concurrency', {}).get('max', 100)
+        functions_over_provisioned = 0
+        
+        for func in response['Functions']:
+            function_name = func['FunctionName']
+            memory_size = func['MemorySize']
+            
+            logger.info(f"Checking Lambda {function_name}: {memory_size} MB")
+            
+            # Check memory (over-provisioned if > 5GB)
+            if memory_size > 5120:  # 5GB threshold
+                logger.info(f"Lambda {function_name} is over-provisioned: {memory_size} MB > 5120 MB")
+                functions_over_provisioned += 1
+                recommendations.append({
+                    "resource_type": "Lambda",
+                    "function_name": function_name,
+                    "current_memory_mb": memory_size,
+                    "recommended_memory_mb": 1024,
+                    "estimated_monthly_savings": "$10.00",
+                    "reason": "Over-provisioned memory - most functions don't need > 5GB, recommend 1GB",
+                    "confidence": "Policy-Based",
+                    "recommendation_source": "Company Cost Policy"
+                })
+            
+            # Check reserved concurrency
+            try:
+                concurrency_response = lambda_client.get_function_concurrency(FunctionName=function_name)
+                reserved_concurrency = concurrency_response.get('ReservedConcurrentExecutions')
+                
+                if reserved_concurrency and reserved_concurrency > max_concurrency:
+                    logger.info(f"Lambda {function_name} concurrency exceeds limit: {reserved_concurrency} > {max_concurrency}")
+                    recommendations.append({
+                        "resource_type": "Lambda",
+                        "function_name": function_name,
+                        "current_concurrency": reserved_concurrency,
+                        "recommended_concurrency": max_concurrency,
+                        "estimated_monthly_savings": "$10.00",
+                        "reason": f"Reserved concurrency exceeds policy maximum of {max_concurrency}",
+                        "confidence": "Policy-Based",
+                        "recommendation_source": "Company Cost Policy"
+                    })
+            except:
+                pass  # Function might not have reserved concurrency set
+        
+        logger.info(f"Lambda Check Complete: {total_functions} functions analyzed, {functions_over_provisioned} over-provisioned, {len(recommendations)} total recommendations")
+    
+    except Exception as e:
+        logger.error(f"Error checking Lambda functions: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+    
+    return recommendations
+
+
+def check_s3_buckets():
+    """Check S3 buckets for lifecycle policies and return recommendations."""
+    import boto3
+    from botocore.exceptions import ClientError
+    from company_policies import get_policy
+    
+    recommendations = []
+    
+    try:
+        s3 = boto3.client('s3')
+        response = s3.list_buckets()
+        
+        logger.info(f"Found {len(response['Buckets'])} S3 buckets to analyze")
+        
+        s3_policy = get_policy('s3')
+        if not s3_policy or not s3_policy.get('lifecycle_policy_required'):
+            logger.info("S3 lifecycle policy not required by company policy")
+            return []
+        
+        buckets_checked = 0
+        buckets_skipped = 0
+        
+        for bucket in response['Buckets']:
+            bucket_name = bucket['Name']
+            
+            # Check if lifecycle policy exists
+            has_lifecycle = False
+            try:
+                lifecycle_config = s3.get_bucket_lifecycle_configuration(Bucket=bucket_name)
+                has_lifecycle = True
+                logger.info(f"Bucket {bucket_name} has lifecycle policy")
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'NoSuchLifecycleConfiguration':
+                    has_lifecycle = False
+                    logger.info(f"Bucket {bucket_name} has NO lifecycle policy - adding to recommendations")
+                else:
+                    # Skip buckets we can't access (permissions, etc.)
+                    logger.warning(f"Skipping bucket {bucket_name}: {e.response['Error']['Code']}")
+                    buckets_skipped += 1
+                    continue
+            except Exception as e:
+                logger.warning(f"Skipping bucket {bucket_name}: {str(e)}")
+                buckets_skipped += 1
+                continue  # Skip buckets with other errors
+            
+            buckets_checked += 1
+            
+            if not has_lifecycle:
+                recommendations.append({
+                    "resource_type": "S3",
+                    "bucket_name": bucket_name,
+                    "issue": "No lifecycle policy configured",
+                    "recommended_action": "Add Intelligent-Tiering or transition to Glacier",
+                    "estimated_monthly_savings": "$20.00",
+                    "reason": "Policy requires lifecycle management for all buckets",
+                    "confidence": "Policy-Based",
+                    "recommendation_source": "Company Cost Policy"
+                })
+        
+        logger.info(f"S3 Check Complete: {buckets_checked} checked, {buckets_skipped} skipped, {len(recommendations)} recommendations")
+    
+    except Exception as e:
+        logger.error(f"Error checking S3 buckets: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+    
+    return recommendations
+
+
+# FUTURE ENHANCEMENT - EBS Optimization
+# Uncomment this function to enable EBS volume optimization
+# def check_ebs_volumes():
+#     """Check EBS volumes against company policies and return recommendations."""
+#     import boto3
+#     import re
+#     from company_policies import get_policy
+#     
+#     recommendations = []
+#     
+#     try:
+#         ec2 = boto3.client('ec2')
+#         response = ec2.describe_volumes()
+#         
+#         ebs_policy = get_policy('ebs')
+#         if not ebs_policy:
+#             return []
+#         
+#         disallowed_types = ebs_policy.get('disallowed_volume_types', [])
+#         recommended_type = ebs_policy.get('recommended_types', ['gp3'])[0]
+#         
+#         for volume in response['Volumes']:
+#             volume_id = volume['VolumeId']
+#             volume_type = volume['VolumeType']
+#             volume_size = volume['Size']
+#             state = volume['State']
+#             
+#             # Check for disallowed types (io1, io2 - expensive provisioned IOPS)
+#             if volume_type in disallowed_types:
+#                 recommendations.append({
+#                     "resource_type": "EBS",
+#                     "volume_id": volume_id,
+#                     "current_type": volume_type,
+#                     "recommended_type": recommended_type,
+#                     "size_gb": volume_size,
+#                     "estimated_monthly_savings": "$15.00",
+#                     "reason": f"Policy violation - {volume_type} is expensive, use {recommended_type} instead",
+#                     "confidence": "Policy-Based",
+#                     "recommendation_source": "Company Cost Policy"
+#                 })
+#             
+#             # Check for unattached volumes (waste of money)
+#             if state == 'available':
+#                 recommendations.append({
+#                     "resource_type": "EBS",
+#                     "volume_id": volume_id,
+#                     "volume_type": volume_type,
+#                     "size_gb": volume_size,
+#                     "issue": "Unattached volume",
+#                     "recommended_action": "Snapshot and delete",
+#                     "estimated_monthly_savings": "$10.00",
+#                     "reason": "Unattached volumes waste money - clean up after 7 days per policy",
+#                     "confidence": "Policy-Based",
+#                     "recommendation_source": "Company Cost Policy"
+#                 })
+#     
+#     except Exception as e:
+#         logger.error(f"Error checking EBS volumes: {str(e)}")
+#     
+#     return recommendations
+
+
 @tool
-def get_rightsizing_recommendations(resource_types: str = "EC2", account_ids: str = None, limit: int = 10) -> str:
-    """Get rightsizing recommendations based on company cost policies and Compute Optimizer data. 
-    Company policies are checked first, then CloudWatch metrics if available. This ensures recommendations 
-    even when Compute Optimizer data is insufficient. Optional parameters: resource_types (EC2, EBS, Lambda), 
-    account_ids (comma-separated), limit (max recommendations)"""
+def get_rightsizing_recommendations(resource_types: str = "EC2,Lambda,S3", account_ids: str = None, limit: int = 50) -> str:
+    """Get cost optimization recommendations for AWS services based on company policies and AWS optimizer data.
+    
+    Supports: EC2 (instances), Lambda (functions), S3 (buckets)
+    
+    Company policies are checked first for immediate recommendations, then AWS optimization services if available.
+    Optional parameters: resource_types (comma-separated: EC2,Lambda,S3), account_ids, limit (max recommendations)"""
     import boto3
     import json
     from company_policies import is_instance_type_allowed, get_recommended_type, get_policy_rationale, get_policy, COMPANY_COST_POLICIES
     
     try:
-        ec2_client = boto3.client('ec2')
-        compute_optimizer = boto3.client('compute-optimizer')
-        
-        # Check enrollment status
-        try:
-            enrollment_response = compute_optimizer.get_enrollment_status()
-            enrollment_status = enrollment_response.get('status', 'Unknown')
-        except:
-            enrollment_status = 'Unknown'
-        
         recommendations = []
         policy_violations = []
+        metrics_recommendations = []
         total_savings = 0
-        
-        # Get company policy
-        ec2_policy = get_policy("ec2")
-        policy_rationale = get_policy_rationale("ec2")
+        enrollment_status = 'N/A'
         
         # Get EC2 recommendations - POLICY-BASED FIRST
         if 'EC2' in resource_types:
+            ec2_client = boto3.client('ec2')
+            compute_optimizer = boto3.client('compute-optimizer')
+            
+            # Check enrollment status
+            try:
+                enrollment_response = compute_optimizer.get_enrollment_status()
+                enrollment_status = enrollment_response.get('status', 'Unknown')
+            except:
+                enrollment_status = 'Unknown'
+            
+            # Get company policy
+            ec2_policy = get_policy("ec2")
+            policy_rationale = get_policy_rationale("ec2")
             # Step 1: Get all running EC2 instances
             try:
                 ec2_response = ec2_client.describe_instances(
@@ -482,7 +760,6 @@ def get_rightsizing_recommendations(resource_types: str = "EC2", account_ids: st
                         })
                 
                 # Step 3: Try to get Compute Optimizer recommendations (if available)
-                metrics_recommendations = []
                 try:
                     optimizer_response = compute_optimizer.get_ec2_instance_recommendations()
                     
@@ -490,13 +767,11 @@ def get_rightsizing_recommendations(resource_types: str = "EC2", account_ids: st
                         instance_arn = rec.get('instanceArn', '')
                         instance_id = instance_arn.split('/')[-1] if instance_arn else 'N/A'
                         
-                        # Skip if already flagged as policy violation or metrics recommendation
+                        # Skip if already flagged as policy violation
                         if any(pv['instance_id'] == instance_id for pv in policy_violations):
                             continue
-                        if any(mr['instance_id'] == instance_id for mr in metrics_recommendations):
-                            continue
                         
-                        if rec.get('recommendationOptions'):
+                    if rec.get('recommendationOptions'):
                             best_option = rec['recommendationOptions'][0]
                             savings = best_option.get('savingsOpportunity', {}).get('estimatedMonthlySavings', {})
                             savings_value = float(savings.get('value', 0))
@@ -510,20 +785,21 @@ def get_rightsizing_recommendations(resource_types: str = "EC2", account_ids: st
                             total_savings += savings_value
                             
                             recommendations.append({
-                                "resource_type": "EC2",
+                            "resource_type": "EC2",
                                 "instance_id": instance_id,
-                                "current_instance_type": rec.get('currentInstanceType', 'N/A'),
+                            "current_instance_type": rec.get('currentInstanceType', 'N/A'),
                                 "recommended_instance_type": recommended_type,
-                                "estimated_monthly_savings": f"${savings_value:.2f}",
-                                "confidence": best_option.get('rank', 'N/A'),
+                            "estimated_monthly_savings": f"${savings_value:.2f}",
+                            "confidence": best_option.get('rank', 'N/A'),
                                 "recommendation_source": "Compute Optimizer",
-                                "utilization_metrics": {
-                                    "cpu": f"{rec.get('utilizationMetrics', {}).get('cpuUtilization', {}).get('value', 0):.1f}%",
-                                    "memory": f"{rec.get('utilizationMetrics', {}).get('memoryUtilization', {}).get('value', 0):.1f}%"
-                                }
+                            "utilization_metrics": {
+                                "cpu": f"{rec.get('utilizationMetrics', {}).get('cpuUtilization', {}).get('value', 0):.1f}%",
+                                "memory": f"{rec.get('utilizationMetrics', {}).get('memoryUtilization', {}).get('value', 0):.1f}%"
+                            }
                             })
                 except Exception as e:
                     # Compute Optimizer data not available - that's OK, we have policy-based recommendations
+                    logger.info(f"Compute Optimizer not available: {str(e)}")
                     pass
                 
             except Exception as e:
@@ -531,6 +807,51 @@ def get_rightsizing_recommendations(resource_types: str = "EC2", account_ids: st
         
         # Combine policy violations, metrics recommendations, and optimizer recommendations
         all_recommendations = policy_violations + metrics_recommendations + recommendations
+        
+        # Check other services based on resource_types parameter
+        service_summary = {"EC2": len(all_recommendations)}
+        
+        # FUTURE ENHANCEMENT - Uncomment to enable RDS optimization
+        # if 'RDS' in resource_types:
+        #     rds_recs = check_rds_instances()
+        #     all_recommendations.extend(rds_recs)
+        #     service_summary["RDS"] = len(rds_recs)
+        #     # Add savings from RDS
+        #     for rec in rds_recs:
+        #         savings_str = rec.get("estimated_monthly_savings", "$0")
+        #         savings_val = float(savings_str.replace("$", "").replace(",", ""))
+        #         total_savings += savings_val
+        
+        if 'Lambda' in resource_types:
+            lambda_recs = check_lambda_functions()
+            all_recommendations.extend(lambda_recs)
+            service_summary["Lambda"] = len(lambda_recs)
+            # Add savings from Lambda
+            for rec in lambda_recs:
+                savings_str = rec.get("estimated_monthly_savings", "$0")
+                savings_val = float(savings_str.replace("$", "").replace(",", ""))
+                total_savings += savings_val
+        
+        if 'S3' in resource_types:
+            s3_recs = check_s3_buckets()
+            all_recommendations.extend(s3_recs)
+            service_summary["S3"] = len(s3_recs)
+            # Add savings from S3
+            for rec in s3_recs:
+                savings_str = rec.get("estimated_monthly_savings", "$0")
+                savings_val = float(savings_str.replace("$", "").replace(",", ""))
+                total_savings += savings_val
+        
+        # FUTURE ENHANCEMENT - Uncomment to enable EBS optimization
+        # if 'EBS' in resource_types:
+        #     ebs_recs = check_ebs_volumes()
+        #     all_recommendations.extend(ebs_recs)
+        #     service_summary["EBS"] = len(ebs_recs)
+        #     # Add savings from EBS
+        #     for rec in ebs_recs:
+        #         savings_str = rec.get("estimated_monthly_savings", "$0")
+        #         savings_val = float(savings_str.replace("$", "").replace(",", ""))
+        #         total_savings += savings_val
         
         # Limit results
         if limit and len(all_recommendations) > limit:
@@ -541,7 +862,9 @@ def get_rightsizing_recommendations(resource_types: str = "EC2", account_ids: st
             "total_running_instances": len(running_instances) if 'EC2' in resource_types and 'running_instances' in locals() else 0,
             "instances_by_type": {},
             "policy_compliant_count": 0,
-            "policy_violating_count": 0
+            "policy_violating_count": 0,
+            "services_analyzed": list(service_summary.keys()),
+            "recommendations_by_service": service_summary
         }
         
         if 'EC2' in resource_types and 'running_instances' in locals():
@@ -567,26 +890,29 @@ def get_rightsizing_recommendations(resource_types: str = "EC2", account_ids: st
             "estimated_total_monthly_savings": f"${total_savings:.2f}",
             "recommendations": all_recommendations,
             "policy_info": {
-                "policy_name": ec2_policy.get("policy_name", "Company Cost Policy") if ec2_policy else "N/A",
+                "policy_name": "Company Cost Policy",
                 "enforcement_level": COMPANY_COST_POLICIES.get("metadata", {}).get("enforcement_level", "strict"),
-                "disallowed_types": ec2_policy.get("disallowed_instance_types", []) if ec2_policy else [],
-                "recommended_types": ec2_policy.get("recommended_types", []) if ec2_policy else []
+                "services_checked": list(service_summary.keys())
             }
         }
         
+        # Build summary based on what was analyzed
+        services_analyzed_str = ', '.join(service_summary.keys())
+        total_resources_analyzed = sum(service_summary.values())
+        
         if not all_recommendations:
-            result["message"] = "Excellent! All your resources comply with company cost policies. No optimization recommendations at this time."
+            result["message"] = f"Excellent! All your {services_analyzed_str} resources comply with company cost policies. No optimization recommendations at this time."
             result["compliance_status"] = "compliant"
-            result["summary"] = f"Analyzed {resource_inventory['total_running_instances']} EC2 instance(s). All are policy-compliant."
+            result["summary"] = f"Analyzed {services_analyzed_str} resources. All are policy-compliant."
         else:
             if policy_violations:
-                result["message"] = f"Found {len(policy_violations)} policy violation(s) and {len(recommendations)} optimization opportunity(ies)."
+                result["message"] = f"Found {len(all_recommendations)} optimization opportunity(ies) across {services_analyzed_str}."
                 result["compliance_status"] = "violations_detected"
-                result["summary"] = f"Analyzed {resource_inventory['total_running_instances']} EC2 instance(s). {len(policy_violations)} violate company policy."
+                result["summary"] = f"Analyzed {services_analyzed_str} resources. Found {len(all_recommendations)} recommendation(s)."
             else:
-                result["message"] = f"All resources comply with policy, but found {len(recommendations)} optimization opportunities based on usage metrics."
+                result["message"] = f"Found {len(all_recommendations)} optimization opportunities across {services_analyzed_str} based on usage metrics."
                 result["compliance_status"] = "compliant_with_optimizations"
-                result["summary"] = f"Analyzed {resource_inventory['total_running_instances']} EC2 instance(s). All are policy-compliant but have metrics-based optimization opportunities."
+                result["summary"] = f"Analyzed {services_analyzed_str} resources. Found {len(all_recommendations)} metrics-based optimization(s)."
         
         return json.dumps(result, indent=2)
         
@@ -626,7 +952,7 @@ def _build_agent() -> Agent:
         "\n\nYour capabilities include:\n"
         "- analyze_aws_costs: Analyze AWS spending patterns, trends, and identify cost drivers\n"
         "- get_cost_anomalies: Detect unusual spending patterns and cost anomalies\n"
-        "- get_rightsizing_recommendations: Get rightsizing recommendations based on company policies and Compute Optimizer data for EC2 instances\n"
+        "- get_rightsizing_recommendations: Get cost optimization recommendations for EC2 instances, Lambda functions, and S3 buckets based on company policies and AWS optimization services\n"
                "- execute_deploy_and_optimize_workflow: Execute a complete optimization workflow that discovers existing instances, analyzes them, and applies rightsizing\n"
         "- execute_rightsizing_workflow: Execute rightsizing workflow on existing resources\n"
         "- calculator: Perform mathematical calculations\n"

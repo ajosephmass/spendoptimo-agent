@@ -121,10 +121,8 @@ SpendOptimo enforces **company cost policies** defined in `agentcore_runtime/com
 Using tools with the Workflow Agent, you can write rules and actions to perform the necessary optimization steps. For this starter kit, we have demonstrated the following capabilities:
 
 - **EC2**: Instance type rightsizing, policy compliance
-- **RDS**: Database instance optimization
 - **Lambda**: Memory and concurrency tuning
 - **S3**: Lifecycle policies and storage class optimization
-- **EBS**: Volume type and size recommendations
 
 ### 3. Autonomous Execution
 
@@ -864,11 +862,9 @@ View full responses in the UI by clicking "Show Details" under each message.
 - ✅ Policy-based recommendations
 - ✅ EC2 rightsizing automation
 
-**Phase 2: Multi-Service Execution**
-- 🚧 S3 lifecycle automation
-- 🚧 Lambda concurrency optimization
-- 🚧 RDS instance rightsizing
-- 🚧 EBS volume optimization
+**Phase 2: Additional Services**
+- ⏳ RDS database instance optimization (code available as reference in `agentcore_runtime/app.py`)
+- ⏳ EBS volume type and unattached volume cleanup (code available as reference in `agentcore_runtime/app.py`)
 
 **Phase 3: Advanced Features**
 - ⏰ Scheduled optimizations (nightly shutdowns)
