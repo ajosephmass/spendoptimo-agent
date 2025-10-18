@@ -20,21 +20,28 @@ style.textContent = `
     min-height: 100vh;
   }
   header {
-    padding: 24px 32px;
-    background: linear-gradient(135deg, rgba(86, 105, 255, 0.3), rgba(32, 38, 73, 0.4));
-    border-bottom: 1px solid rgba(118, 132, 255, 0.2);
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+    padding: 20px 32px;
+    background: linear-gradient(135deg, rgba(86, 105, 255, 0.85), rgba(73, 228, 255, 0.8));
+    border-bottom: 1px solid rgba(118, 132, 255, 0.4);
+    box-shadow: 0 8px 32px rgba(86, 105, 255, 0.25);
   }
   header h1 {
     margin: 0;
-    font-size: 28px;
-    font-weight: 600;
-    letter-spacing: 0.4px;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    background: linear-gradient(135deg, #ffffff, #b8bef5);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
   header p {
-    margin: 8px 0 0;
-    max-width: 640px;
-    color: #b8bef5;
+    margin: 6px 0 0;
+    max-width: 580px;
+    color: #e0e4f7;
+    font-size: 14px;
+    line-height: 1.5;
+    font-weight: 400;
   }
   main {
     flex: 1;
@@ -250,18 +257,22 @@ style.textContent = `
   }
   .login-button {
     width: 100%;
-    background: linear-gradient(135deg, rgba(86, 105, 255, 0.95), rgba(73, 228, 255, 0.9));
-    color: #ffffff;
-    border: none;
+    background: transparent !important;
+    color: #ffffff !important;
+    border: 2px solid #5669ff;
+    box-shadow: 0 0 0 1px rgba(73, 228, 255, 0.5) inset;
     padding: 14px 22px;
     border-radius: 14px;
     font-weight: 600;
     cursor: pointer;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    transition: all 0.2s ease;
   }
   .login-button:hover {
+    background: rgba(86, 105, 255, 0.1) !important;
+    border-color: rgba(73, 228, 255, 0.8);
+    color: #ffffff !important;
     transform: translateY(-1px);
-    box-shadow: 0 10px 25px rgba(82, 104, 255, 0.35);
+    box-shadow: 0 0 0 1px rgba(73, 228, 255, 0.8) inset, 0 10px 25px rgba(82, 104, 255, 0.25);
   }
   aside .card textarea {
     width: 100%;
@@ -297,8 +308,8 @@ const app = document.getElementById('app');
 app.innerHTML = `
   <div class="page">
     <header>
-      <h1>SpendOptimo Agent Console</h1>
-      <p>Chat with the SpendOptimo FinOps agent, request optimization plans, and launch Strands that automatically apply and verify cost actions.</p>
+      <h1>SpendOptimo</h1>
+      <p>Amazon AgentCore powered FinOps for autonomous AWS cost optimization</p>
     </header>
     <main>
       <section class="chat">
@@ -382,13 +393,19 @@ function showAuthenticatedState(payload) {
   if (userInfo) userInfo.style.display = 'block';
   if (authSection) authSection.style.display = 'none';
   if (userName) userName.textContent = payload.email || payload['cognito:username'] || 'User';
-  if (tokenStatus) tokenStatus.textContent = 'Authenticated';
+  if (tokenStatus) {
+    tokenStatus.innerHTML = '<span style="color: #2ecc71; font-weight: bold; margin-right: 6px;">✓</span>Authenticated';
+    tokenStatus.style.color = '#2ecc71';
+  }
 }
 
 function showUnauthenticatedState() {
   if (userInfo) userInfo.style.display = 'none';
   if (authSection) authSection.style.display = 'block';
-  if (tokenStatus) tokenStatus.textContent = 'Not authenticated';
+  if (tokenStatus) {
+    tokenStatus.innerHTML = '<span style="color: #e74c3c; font-weight: bold; margin-right: 6px;">✗</span>Not authenticated';
+    tokenStatus.style.color = '#e74c3c';
+  }
 }
 
 function initiateCognitoLogin() {

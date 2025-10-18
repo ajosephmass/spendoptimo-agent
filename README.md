@@ -1,41 +1,41 @@
-﻿# 🚀 SpendOptimo – Multi-Agent Autonomous FinOps Platform
+﻿# SpendOptimo – Multi-Agent Autonomous FinOps Platform
 
 > **"What if your cloud costs optimized themselves?"**
 
-SpendOptimo is a groundbreaking **multi-agent AI system** that doesn't just analyze your AWS costs—it **understands, recommends, and executes** optimizations autonomously. Built on AWS Bedrock AgentCore and Strands Agents SDK, it represents the future of intelligent cloud cost management.
+SpendOptimo is a **multi-agent AI system** that doesn't just analyze your AWS costs—it **understands, recommends, and executes** optimizations autonomously. Built on AWS Bedrock AgentCore and Strands Agents SDK, it demonstrates intelligent cloud cost management using agentic workflows.
 
-## 🎯 The Vision
+## 💼 The Vision
 
 Traditional FinOps tools give you dashboards. **SpendOptimo gives you an AI co-pilot** that:
 
-- 🧠 **Analyzes** your AWS infrastructure using company policies, AWS Compute Optimizer, and cost trends
-- 💬 **Converses** with you in natural language about optimization opportunities
-- 🤖 **Executes** approved recommendations autonomously across EC2, RDS, S3, Lambda, and EBS
-- ✅ **Verifies** every change it makes, ensuring safety and compliance
+- **Analyzes** your AWS infrastructure using company policies, AWS Compute Optimizer, and cost trends
+- **Converses** with you in natural language about optimization opportunities
+- **Executes** approved recommendations autonomously across EC2, RDS, S3, Lambda, and EBS
+- **Verifies** every change it makes, ensuring safety and compliance
 
 **The magic?** Two specialized AI agents working in tandem—one for intelligence, one for execution.
 
 ---
 
-## 🏗️ Revolutionary Multi-Agent Architecture
+## ⚙️ Architecture
 
 SpendOptimo uses a **separation of concerns** approach with two distinct AgentCore runtimes:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    🌐 User Interface (React + Vite)                  │
-│                  https://d293f08cklhjup.cloudfront.net              │
+│                    [CloudFront] User Interface                       │
+│                       React + Vite + Cognito                        │
 │                                                                       │
-│  • Dark, modern chat interface                                       │
-│  • Cognito authentication                                            │
-│  • Dynamic action buttons in chat responses                          │
+│  • Conversational chat interface                                     │
+│  • AWS Cognito authentication                                        │
+│  • Dynamic action buttons                                            │
 │  • Real-time workflow status                                         │
 └───────────────────────────────┬───────────────────────────────────────┘
                                 │
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│              🔌 API Gateway + Lambda Orchestrator                    │
-│                    (Python + Starlette + Mangum)                    │
+│              [API Gateway + Lambda] Orchestrator                     │
+│                    Python + Starlette + Mangum                      │
 │                                                                       │
 │  Routes:                                                              │
 │  • POST /v1/chat        → Analysis Agent                            │
@@ -45,8 +45,8 @@ SpendOptimo uses a **separation of concerns** approach with two distinct AgentCo
               │                             │
               ▼                             ▼
 ┌─────────────────────────────┐   ┌─────────────────────────────────┐
-│  🧠 Analysis Agent          │   │  ⚡ Workflow Agent              │
-│  (Bedrock AgentCore)        │   │  (Bedrock AgentCore)            │
+│  [Bedrock] Analysis Agent   │   │  [Bedrock] Workflow Agent       │
+│  AgentCore Runtime          │   │  AgentCore Runtime              │
 │                             │   │                                 │
 │  Runtime: SpendOptimo       │   │  Runtime: SpendOptimoWorkflow   │
 │  Model: Amazon Nova Pro     │   │  Model: Amazon Nova Lite        │
@@ -70,38 +70,38 @@ SpendOptimo uses a **separation of concerns** approach with two distinct AgentCo
               │                             │
               ▼                             ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                     📊 Evidence & Actuation Layer                    │
+│                   [AWS Services] Evidence & Actuation                │
 │                                                                       │
-│  • AWS Cost Explorer        • AWS Compute Optimizer                 │
-│  • CloudWatch Metrics       • EC2 / RDS / Lambda APIs               │
-│  • Company Cost Policies    • S3 Lifecycle Management               │
+│  • Cost Explorer            • Compute Optimizer                      │
+│  • CloudWatch               • EC2 / RDS / Lambda                     │
+│  • Company Policies         • S3 / EBS                               │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 🎭 Why Two Agents?
+### Why Two Agents?
 
 **Analysis Agent (Nova Pro):**
-- **Higher intelligence** for complex reasoning
+- Higher intelligence for complex reasoning
 - Understands company policies, cost trends, and optimization strategies
 - Generates comprehensive, conversational recommendations
-- **Cost-effective for analysis** (only runs when user asks questions)
+- Cost-effective for analysis (only runs when user asks questions)
 
 **Workflow Agent (Nova Lite):**
-- **Lower latency, lower cost** for repetitive execution tasks
+- Lower latency, lower cost for repetitive execution tasks
 - Receives structured recommendations and executes them
-- **Service-agnostic intelligence** - can handle EC2, S3, RDS, Lambda, etc.
+- Service-agnostic intelligence - can handle EC2, S3, RDS, Lambda, etc.
 - Runs asynchronously in the background
 
 This architecture achieves **separation of intelligence from execution**, enabling:
-- ✅ **Scalability** - Analysis doesn't block execution
-- ✅ **Cost optimization** - Right model for the right task
-- ✅ **Flexibility** - Swap out models or add agents independently
+- **Scalability** - Analysis doesn't block execution
+- **Cost optimization** - Right model for the right task
+- **Flexibility** - Swap out models or add agents independently
 
 ---
 
-## 🌟 Key Features
+## ✨ Key Features
 
-### 1️⃣ **Policy-Driven Intelligence**
+### 1. Policy-Driven Intelligence
 
 SpendOptimo enforces **company cost policies** defined in `agentcore_runtime/company_policies.py`:
 
@@ -114,9 +114,11 @@ SpendOptimo enforces **company cost policies** defined in `agentcore_runtime/com
 }
 ```
 
-**Immediate recommendations** without waiting for 14 days of CloudWatch data!
+**Immediate recommendations** without waiting for 14 days of data! The Analysis Agent also finds cost anomalies from AWS Cost Explorer, CloudWatch, and more.
 
-### 2️⃣ **Multi-Service Support**
+### 2. Multi-Service Support
+
+Using tools with the Workflow Agent, you can write rules and actions to perform the necessary optimization steps. For this starter kit, we have demonstrated the following capabilities:
 
 - **EC2**: Instance type rightsizing, policy compliance
 - **RDS**: Database instance optimization
@@ -124,7 +126,11 @@ SpendOptimo enforces **company cost policies** defined in `agentcore_runtime/com
 - **S3**: Lifecycle policies and storage class optimization
 - **EBS**: Volume type and size recommendations
 
-### 3️⃣ **Autonomous Execution**
+### 3. Autonomous Execution
+
+The Workflow Agent can autonomously execute approved optimization recommendations, reducing manual effort and ensuring consistent application of cost policies.
+
+**Example Scenario:**
 
 1. Ask: _"What EC2 instances violate our cost policy?"_
 2. Agent analyzes and responds with violations
@@ -135,24 +141,24 @@ SpendOptimo enforces **company cost policies** defined in `agentcore_runtime/com
    - Restarts instances
    - Verifies changes
 
-### 4️⃣ **Smart Recommendations**
+### 4. Smart Recommendations
 
 The Analysis Agent combines:
-- 📋 **Company cost policies** (primary source)
-- 📊 **AWS Compute Optimizer** (ML-based insights)
-- 📈 **Cost Explorer trends** (historical spend patterns)
-- ☁️ **CloudWatch metrics** (actual utilization data)
+- **Company cost policies** (primary source)
+- **AWS Compute Optimizer** (ML-based insights)
+- **Cost Explorer trends** (historical spend patterns)
+- **CloudWatch metrics** (actual utilization data)
 
-### 5️⃣ **Secure by Default**
+### 5. Secure by Default
 
-- 🔐 **Cognito authentication** for all API calls
-- 🛡️ **IAM least-privilege** roles for each component
-- ✅ **Approval-based workflow** - no changes without user consent
-- 📝 **Audit trail** in CloudWatch Logs
+- **Cognito authentication** for all API calls
+- **IAM least-privilege** roles for each component
+- **Approval-based workflow** - no changes without user consent
+- **Audit trail** in CloudWatch Logs
 
 ---
 
-## 📁 Project Structure
+## 📂 Project Structure
 
 ```
 spendoptimo/
@@ -207,7 +213,7 @@ spendoptimo/
 
 ---
 
-## 🛠️ Technology Stack
+## 🔧 Technology Stack
 
 ### Core Technologies
 
@@ -305,7 +311,7 @@ node deploy-ui.js
 
 ---
 
-## 🎮 How to Use
+## 💻 How to Use
 
 ### 1. Access the UI
 
@@ -354,7 +360,7 @@ Try these conversational queries:
 
 ---
 
-## 🧩 How It Works
+## 🔄 How It Works
 
 ### The Recommendation Flow
 
@@ -397,7 +403,7 @@ sequenceDiagram
 
 ---
 
-## 💡 Company Cost Policies
+## 📋 Company Cost Policies
 
 Define your optimization rules in `agentcore_runtime/company_policies.py`:
 
@@ -437,17 +443,17 @@ The agent **automatically checks these policies** and provides immediate recomme
 
 ---
 
-## 🔧 Configuration
+## ⚙️ Configuration
 
 ### Enable AWS Services
 
 **1. Compute Optimizer** (required for ML-based recommendations):
-```bash
-aws compute-optimizer update-enrollment-status \
-  --status Active \
-  --include-member-accounts \
-  --region us-east-1
-```
+  ```bash
+  aws compute-optimizer update-enrollment-status \
+    --status Active \
+    --include-member-accounts \
+    --region us-east-1
+  ```
 
 **2. Cost Explorer** (automatically enabled, but check):
 ```bash
@@ -471,7 +477,7 @@ After deployment, these are automatically configured in SSM Parameter Store:
 
 ---
 
-## 🧪 Testing & Validation
+## ✅ Testing & Validation
 
 ### Create a Test Instance
 
@@ -558,7 +564,7 @@ This creates an `r5.large` instance (violates policy → should recommend `t3.me
 
 ---
 
-## 🎯 Agent Details
+## 🤖 Agent Details
 
 ### Analysis Agent (SpendOptimo)
 
@@ -661,7 +667,7 @@ fields @timestamp, @message
 
 ---
 
-## 🔄 Workflow Execution Details
+## ⚡ Workflow Execution Details
 
 ### Synchronous vs. Asynchronous
 
@@ -690,38 +696,7 @@ If workflow takes > 29 seconds, API Gateway returns `504 Gateway Timeout`, but:
 
 ---
 
-## 🎨 UI Features
-
-### Chat Interface
-
-- **Dark theme** with gradient backgrounds
-- **Markdown rendering** for agent responses
-- **Code syntax highlighting** for technical details
-- **Collapsible metadata** for debugging
-- **Responsive design** for mobile and desktop
-
-### Dynamic Action Buttons
-
-Buttons appear **inline with chat responses**, not as static UI elements:
-
-```
-Agent: "Found 2 policy violations..."
-       [Execute Recommendations] ← Appears dynamically
-```
-
-Button **only shows when recommendations exist:**
-- ✅ With violations: Button appears
-- ❌ All compliant: No button
-
-### Session Management
-
-- **Token persistence** across page refreshes
-- **Auto-logout** on token expiration
-- **Clear session** button for security
-
----
-
-## 🔐 IAM Permissions
+## 🔒 IAM Permissions
 
 ### Analysis Agent Role
 
@@ -760,7 +735,7 @@ Permissions:
 
 ---
 
-## 🚧 Extending SpendOptimo
+## 🔌 Extending SpendOptimo
 
 ### Adding a New Service (e.g., DynamoDB)
 
@@ -797,7 +772,7 @@ def update_dynamodb_capacity(table_name: str, mode: str) -> Dict[str, Any]:
 
 ---
 
-## 📈 Cost Optimization Strategies
+## 💰 Cost Optimization Strategies
 
 SpendOptimo implements industry best practices:
 
@@ -825,7 +800,7 @@ SpendOptimo implements industry best practices:
 
 ---
 
-## 🎓 Learning Resources
+## 📚 Learning Resources
 
 ### Understanding the Code
 
@@ -850,7 +825,7 @@ SpendOptimo implements industry best practices:
 
 ---
 
-## 🐛 Troubleshooting
+## 🔍 Troubleshooting
 
 ### Common Issues
 
@@ -880,7 +855,7 @@ View full responses in the UI by clicking "Show Details" under each message.
 
 ---
 
-## 🔮 Future Enhancements
+## 🎯 Future Enhancements
 
 ### Recommended Roadmap
 
@@ -910,7 +885,7 @@ View full responses in the UI by clicking "Show Details" under each message.
 
 ---
 
-## 🏆 Why SpendOptimo Matters
+## 💡 Why SpendOptimo Matters
 
 ### The Problem with Traditional FinOps
 
@@ -962,31 +937,9 @@ This is a reference implementation showcasing:
 
 ---
 
-## 📜 License
+## 📄 License
 
 MIT License - See LICENSE file
-
----
-
-## 🙏 Acknowledgments
-
-Built with:
-- **AWS Bedrock AgentCore** - Agent runtime infrastructure
-- **AWS Strands Agents SDK** - Workflow orchestration
-- **Amazon Nova** - Next-generation foundation models
-- **AWS CDK** - Infrastructure as code
-- **React + Vite** - Modern web framework
-
-**Special thanks to the AWS Bedrock team** for creating AgentCore and Strands—this project wouldn't be possible without these revolutionary tools.
-
----
-
-## 📞 Support
-
-- **Issues:** Create a GitHub issue
-- **Questions:** Check CloudWatch logs first
-- **CloudFormation failures:** Review stack events in AWS Console
-- **Agent debugging:** Enable verbose logging in `app.py`
 
 ---
 
