@@ -823,7 +823,9 @@ def get_rightsizing_recommendations(resource_types: str = "EC2,Lambda,S3", accou
         #         total_savings += savings_val
         
         if 'Lambda' in resource_types:
+            logger.info("Starting Lambda function check...")
             lambda_recs = check_lambda_functions()
+            logger.info(f"Lambda check returned {len(lambda_recs)} recommendations")
             all_recommendations.extend(lambda_recs)
             service_summary["Lambda"] = len(lambda_recs)
             # Add savings from Lambda
@@ -833,7 +835,9 @@ def get_rightsizing_recommendations(resource_types: str = "EC2,Lambda,S3", accou
                 total_savings += savings_val
         
         if 'S3' in resource_types:
+            logger.info("Starting S3 bucket check...")
             s3_recs = check_s3_buckets()
+            logger.info(f"S3 check returned {len(s3_recs)} recommendations")
             all_recommendations.extend(s3_recs)
             service_summary["S3"] = len(s3_recs)
             # Add savings from S3
@@ -860,6 +864,8 @@ def get_rightsizing_recommendations(resource_types: str = "EC2,Lambda,S3", accou
         # Build comprehensive resource inventory
         resource_inventory = {
             "total_running_instances": len(running_instances) if 'EC2' in resource_types and 'running_instances' in locals() else 0,
+            "total_lambda_functions": service_summary.get("Lambda", 0),
+            "total_s3_buckets": service_summary.get("S3", 0),
             "instances_by_type": {},
             "policy_compliant_count": 0,
             "policy_violating_count": 0,
