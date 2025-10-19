@@ -1,250 +1,256 @@
-# SpendOptimoWorkflow Agent
+# Workflow Agent Runtime
 
-**Execution Agent for AWS Cost Optimizations**
+This directory contains the runtime code for the **SpendOptimo Workflow Agent**, powered by Amazon Bedrock AgentCore and Amazon Nova Lite.
 
-## Overview
+## Purpose
 
-The SpendOptimoWorkflow agent is a **separate AgentCore runtime** that executes optimization recommendations using Amazon Nova Lite. It works in tandem with the SpendOptimo analysis agent.
+The Workflow Agent is the execution specialist that:
+- Receives recommendations from the Analysis Agent
+- Orchestrates multi-step AWS resource modifications
+- Executes optimizations safely (stop → modify → start → verify)
+- Reports execution status and results
 
-## Architecture
+## Key Files
 
-```
-SpendOptimo Agent (Analysis)
-├─ Model: Amazon Nova Pro
-├─ Purpose: Analyze costs, provide recommendations
-└─ Returns: Recommendations + Execute button
+### `app.py`
+Main agent runtime with execution tools:
+- **EC2 Tools**: Stop, modify instance type, start, verify
+- **S3 Tools**: Apply lifecycle policies, update storage classes
+- **Lambda Tools**: Update memory, concurrency settings
+- **RDS Tools**: Modify instance classes (placeholder)
+- **EBS Tools**: Modify volume types (placeholder)
 
-User clicks "Execute Workflow"
-    ↓
-SpendOptimoWorkflow Agent (Execution)
-├─ Model: Amazon Nova Lite (cheaper, faster)
-├─ Input: Recommendations from analysis agent
-├─ Tools: AWS service modification tools
-└─ Output: Execution results
-```
+### Tool Categories
 
-## Capabilities
-
-### Supported AWS Services
-
-- **EC2**: Stop, modify instance type, start, verify
-- **S3**: Apply lifecycle policies for storage tiering
-- **Lambda**: Update reserved concurrency
-- **RDS**: Modify database instance classes
-- **EBS**: Modify volume types and sizes
-
-### Tool List
-
-| Tool | Service | Action |
-|------|---------|--------|
-| `ec2_stop_instance` | EC2 | Stop an instance |
-| `ec2_modify_instance_type` | EC2 | Change instance type |
-| `ec2_start_instance` | EC2 | Start an instance |
-| `ec2_verify_instance_type` | EC2 | Verify modification |
-| `s3_put_lifecycle_policy` | S3 | Apply lifecycle policy |
-| `lambda_update_concurrency` | Lambda | Update concurrency |
-| `rds_modify_instance` | RDS | Modify instance class |
-| `ebs_modify_volume` | EBS | Modify volume type/size |
-
-## How It Works
-
-### 1. Recommendation Format
-
-The analysis agent provides recommendations in this format:
-
-```json
-{
-  "resource_type": "EC2",
-  "instance_id": "i-0323c4a8ca47edc2f",
-  "current_instance_type": "r5.large",
-  "recommended_instance_type": "t3.medium",
-  "estimated_monthly_savings": "$50.00",
-  "reason": "Policy violation"
-}
+#### EC2 Instance Management
+```python
+ec2_stop_instance(instance_id)
+ec2_modify_instance_type(instance_id, new_instance_type)
+ec2_start_instance(instance_id)
+ec2_verify_instance_running(instance_id)
 ```
 
-### 2. Workflow Agent Processing
-
-The workflow agent receives these recommendations and:
-
-1. **Identifies the resource type** (EC2, S3, Lambda, etc.)
-2. **Selects appropriate tools** based on the action needed
-3. **Executes the changes** using AWS APIs
-4. **Handles errors intelligently** using LLM reasoning
-5. **Verifies the results** to ensure success
-
-### 3. Example Execution
-
-**For EC2 Rightsizing:**
-```
-User recommendation: r5.large → t3.medium
-
-Workflow Agent thinks:
-"I need to rightsize this EC2 instance. Let me:
-1. Stop the instance using ec2_stop_instance
-2. Modify the type using ec2_modify_instance_type
-3. Start it using ec2_start_instance
-4. Verify with ec2_verify_instance_type"
-
-Result: ✅ Instance modified successfully
+#### S3 Lifecycle Management
+```python
+s3_put_lifecycle_policy(bucket_name, transition_days, storage_class)
 ```
 
-**For S3 Storage Tiering:**
-```
-User recommendation: Apply GLACIER transition after 90 days
-
-Workflow Agent thinks:
-"I need to apply a lifecycle policy. Let me:
-1. Use s3_put_lifecycle_policy with the bucket name
-2. Set transition to GLACIER after 90 days"
-
-Result: ✅ Lifecycle policy applied
+#### Lambda Optimization
+```python
+lambda_update_memory(function_name, memory_size_mb)
+lambda_update_concurrency(function_name, reserved_concurrent_executions)
 ```
 
-## Benefits
+## Environment Variables
 
-### 1. **Service-Agnostic**
-- No hardcoded workflows needed
-- LLM figures out which tools to call
-- Easy to add new AWS services
-
-### 2. **Intelligent Error Handling**
-```
-Scenario: Instance has EBS volume incompatibility
-
-Without LLM:
-❌ Hard failure, workflow stops
-
-With Workflow Agent:
-✅ "I see this instance has an io2 volume incompatible with t3.medium.
-   Let me first modify the volume to gp3, then modify the instance."
-```
-
-### 3. **Cost Optimized**
-- Uses **Nova Lite** (much cheaper than Nova Pro)
-- Only pays for execution time
-- No idle costs (serverless)
-
-### 4. **Natural Language Results**
-Instead of JSON error codes, you get:
-> "Successfully modified instance i-abc123 from r5.large to t3.medium. The instance is now running and verified. Estimated savings: $50/month."
+- `AWS_REGION`: AWS region for resource modifications (default: us-east-1)
+- `LOG_LEVEL`: Logging verbosity (default: INFO)
 
 ## Deployment
 
-Deploy using the automated script:
-
-```bash
-node deploy-enhanced-agent.js
-```
-
-Or manually:
-
+This runtime is deployed as a Docker-based Lambda function via AWS CDK:
 ```bash
 cd infra
-
-# 1. Deploy workflow agent
-npx cdk deploy SpendOptimoWorkflowAgent --require-approval never
-
-# 2. Get the endpoint
-ENDPOINT=$(aws cloudformation describe-stacks --stack-name SpendOptimoWorkflowAgent --query "Stacks[0].Outputs[?OutputKey=='WorkflowAgentEndpoint'].OutputValue" --output text)
-
-# 3. Update API Lambda
-LAMBDA_NAME=$(aws lambda list-functions --query "Functions[?contains(FunctionName, 'SpendOptimoApi')].FunctionName" --output text)
-aws lambda update-function-configuration \
-  --function-name $LAMBDA_NAME \
-  --environment "Variables={...,WORKFLOW_AGENT_ENDPOINT=$ENDPOINT}"
-
-# 4. Deploy API
-npx cdk deploy SpendOptimoApi --require-approval never
+npx cdk deploy SpendOptimoWorkflowAgent
 ```
+
+The CDK stack:
+- Builds the Docker image with Python dependencies
+- Creates IAM roles with **write permissions** for resource modifications
+- Registers the agent with Bedrock AgentCore
+- Configures the Nova Lite model
 
 ## IAM Permissions
 
-The workflow agent requires permissions to modify AWS resources:
+The Workflow Agent requires elevated permissions to modify resources:
 
-- **EC2**: `StopInstances`, `StartInstances`, `ModifyInstanceAttribute`, `DescribeInstances`
-- **S3**: `PutLifecycleConfiguration`, `GetLifecycleConfiguration`
-- **Lambda**: `PutFunctionConcurrency`, `UpdateFunctionConfiguration`
-- **RDS**: `ModifyDBInstance`, `DescribeDBInstances`
-- **EBS**: `ModifyVolume`, `DescribeVolumes`
+```typescript
+// EC2 permissions
+'ec2:StopInstances',
+'ec2:StartInstances',
+'ec2:ModifyInstanceAttribute',
+'ec2:DescribeInstances',
+'ec2:DescribeInstanceStatus',
 
-These are configured in `infra/lib/workflow-agent-stack.ts`.
+// S3 permissions
+'s3:PutLifecycleConfiguration',
+'s3:GetLifecycleConfiguration',
 
-## Extending with New Services
-
-To add support for a new AWS service:
-
-1. **Add a tool** in `workflow_runtime/app.py`:
-```python
-@tool
-def dynamodb_update_capacity(table_name: str, read_capacity: int, write_capacity: int) -> str:
-    """Update DynamoDB table capacity."""
-    # Implementation
+// Lambda permissions
+'lambda:UpdateFunctionConfiguration',
+'lambda:PutFunctionConcurrency',
+'lambda:GetFunctionConfiguration'
 ```
 
-2. **Add to agent tools list**:
+**⚠️ Security Note**: These are powerful permissions. In production:
+- Restrict to specific resource ARNs (not `*`)
+- Add resource tags for policy conditions
+- Implement approval workflows for high-impact changes
+- Enable CloudTrail for audit logging
+
+## Workflow Execution Flow
+
+```
+API Gateway (/v1/automation)
+    ↓
+Lambda (generates execution plan)
+    ↓
+Async Lambda Invocation
+    ↓
+Workflow Agent (Nova Lite)
+    ↓
+├─→ Tool: ec2_stop_instance
+├─→ Tool: ec2_modify_instance_type
+├─→ Tool: ec2_start_instance
+├─→ Tool: ec2_verify_instance_running
+└─→ Returns: Execution results
+```
+
+## Model: Amazon Nova Lite
+
+- **Context Window**: 300K tokens
+- **Strengths**: Fast execution, low cost, tool orchestration
+- **Cost**: ~$0.06 per 1M input tokens, ~$0.24 per 1M output tokens (13x cheaper than Nova Pro!)
+- **Latency**: <1 second for tool calls
+- **Use Case**: High-volume, repetitive tasks where speed and cost matter
+
+## System Prompt
+
+The agent is instructed to:
+1. Process recommendations by resource_type (EC2, S3, Lambda)
+2. Execute tools with correct parameters
+3. Handle failures gracefully with clear error messages
+4. Report status for each recommendation
+5. Summarize total savings achieved
+
+## Extending the Agent
+
+### Adding New Tools
+
+Example: Add EBS volume modification tool
+
 ```python
-Agent(
-    model=model,
-    tools=[
-        # ... existing tools
-        dynamodb_update_capacity,
-    ]
+@tool
+def ebs_modify_volume_type(volume_id: str, volume_type: str) -> str:
+    """Modify EBS volume type (e.g., gp2 → gp3 for cost savings)."""
+    import boto3
+    from botocore.exceptions import ClientError
+    
+    try:
+        ec2 = boto3.client('ec2', region_name=os.getenv('AWS_REGION', 'us-east-1'))
+        logger.info(f"Modifying volume {volume_id} to {volume_type}")
+        
+        ec2.modify_volume(
+            VolumeId=volume_id,
+            VolumeType=volume_type
+        )
+        
+        return f"Successfully modified volume {volume_id} to {volume_type}"
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        error_msg = e.response['Error']['Message']
+        logger.error(f"Failed to modify volume: {error_code} - {error_msg}")
+        return f"Failed to modify volume {volume_id}: {error_code} - {error_msg}"
+```
+
+### Update IAM Permissions
+
+Add to `infra/lib/workflow-agent-stack.ts`:
+```typescript
+workflowAgentRole.addToPolicy(new iam.PolicyStatement({
+  actions: ['ec2:ModifyVolume', 'ec2:DescribeVolumes'],
+  resources: ['*'],
+}));
+```
+
+### Update System Prompt
+
+Add guidance for the new tool in `app.py`:
+```python
+system_prompt = (
+    "You are SpendOptimoWorkflow, an AWS optimization execution agent. "
+    "..."
+    "- For EBS: Use ebs_modify_volume_type(volume_id, volume_type)\n"
+    "..."
 )
 ```
 
-3. **Add IAM permissions** in CDK stack
+## Safety Features
 
-4. **Redeploy**:
+### Built-in Safeguards
+
+1. **No Deletions**: The agent never deletes resources (instances, buckets, functions)
+2. **Verification Steps**: After modifying resources, verify they're in the expected state
+3. **Error Handling**: All tools use try-except with detailed error messages
+4. **Logging**: Every action is logged to CloudWatch for audit trails
+
+### Recommended Additions for Production
+
+1. **Dry-Run Mode**: Test workflows without actually modifying resources
+2. **Rollback Capability**: Store previous configurations for easy rollback
+3. **Health Checks**: Verify application health after modifications
+4. **Change Windows**: Only execute during approved maintenance windows
+5. **Approval Workflows**: Require human approval for high-impact changes
+
+## Logs
+
+Workflow execution logs are available in CloudWatch:
 ```bash
-npx cdk deploy SpendOptimoWorkflowAgent --require-approval never
+aws logs tail /aws/bedrock-agentcore/runtimes/SpendOptimoWorkflow-<runtime-id>-prod --follow
 ```
 
-That's it! The LLM will automatically know when to call your new tool.
+Look for:
+- `[INFO] Starting workflow execution: {execution_id}`
+- `[INFO] Stopping EC2 instance {instance_id}`
+- `[INFO] Successfully applied lifecycle policy to {bucket_name}`
+- `[ERROR] Failed to modify Lambda {function_name}: {error}`
 
 ## Testing
 
-Test the workflow agent directly:
-
-```python
-import requests
-
-response = requests.post(
-    "https://<workflow-agent-endpoint>/invocations",
-    json={
-        "recommendations": [{
-            "resource_type": "EC2",
-            "instance_id": "i-abc123",
-            "current_instance_type": "r5.large",
-            "recommended_instance_type": "t3.medium"
-        }]
+### Manual Testing via API
+```bash
+curl -X POST https://your-api-url/v1/automation \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "optimize_resources",
+    "context": {
+      "recommendations": [
+        {
+          "resource_type": "S3",
+          "bucket_name": "test-bucket",
+          "recommendation": "Apply Intelligent-Tiering"
+        }
+      ]
     }
-)
-
-print(response.json())
+  }'
 ```
 
-## Troubleshooting
+### End-to-End Testing
+1. Create test resources: `node test/create-test-bucket.js`
+2. Get recommendations from Analysis Agent
+3. Execute via UI "Execute Recommendations" button
+4. Monitor CloudWatch logs
+5. Verify changes: `aws s3api get-bucket-lifecycle-configuration --bucket test-bucket`
 
-### Workflow does nothing
-- Check that recommendations are being passed: Look at CloudWatch logs for "Workflow agent received X recommendations"
-- Verify IAM permissions: Agent role must have permissions to modify resources
+## Common Issues
 
-### Tool execution fails
-- Check CloudWatch logs for the specific error
-- The agent will explain what went wrong in natural language
+### Issue: "AccessDenied" errors
+**Cause**: Missing IAM permissions
+**Fix**: Add required actions to `workflow-agent-stack.ts` and redeploy
 
-### Timeout errors
-- Increase the timeout in `api/src/app.py` (default: 300 seconds)
-- Or configure async execution if workflows take longer
+### Issue: Agent doesn't call the right tool
+**Cause**: Ambiguous system prompt or missing parameter examples
+**Fix**: Add explicit instructions in system prompt with parameter examples
 
-## Cost Optimization
+## Performance
 
-The workflow agent uses **Amazon Nova Lite** which is significantly cheaper than Nova Pro:
+Typical execution times:
+- **EC2 Rightsizing**: 2-3 minutes (stop + modify + start + verify)
+- **S3 Lifecycle Policy**: 5-10 seconds per bucket
+- **Lambda Update**: 3-5 seconds per function
 
-- **Analysis Agent (Nova Pro)**: ~$0.003 per 1K input tokens
-- **Workflow Agent (Nova Lite)**: ~$0.0006 per 1K input tokens (5x cheaper!)
-
-By separating analysis from execution, we optimize costs while maintaining intelligent behavior.
-
+For large batches (50+ resources), consider:
+- Parallel execution (modify tool to support batching)
+- Progress updates (stream intermediate results)
+- Timeout handling (split into multiple workflow executions)
 
