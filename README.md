@@ -21,62 +21,10 @@ Traditional FinOps tools give you dashboards. **SpendOptimo gives you an AI co-p
 
 SpendOptimo uses a **separation of concerns** approach with two distinct AgentCore runtimes:
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    [CloudFront] User Interface                      │
-│                       React + Vite + Cognito                        │
-│                                                                     │
-│  • Conversational chat interface                                    │
-│  • AWS Cognito authentication                                       │
-│  • Dynamic action buttons                                           │
-│  • Real-time workflow status                                        │
-└───────────────────────────────┬─────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│              [API Gateway + Lambda] Orchestrator                    │
-│                    Python + Starlette + Mangum                      │
-│                                                                     │
-│  Routes:                                                            │
-│  • POST /v1/chat        → Analysis Agent                            │
-│  • GET  /v1/analyze     → Cost Explorer direct                      │
-│  • POST /v1/automation  → Workflow Agent                            │
-└─────────────┬─────────────────────────────┬─────────────────────────┘
-              │                             │
-              ▼                             ▼
-┌─────────────────────────────┐   ┌─────────────────────────────────┐
-│  [Bedrock] Analysis Agent   │   │  [Bedrock] Workflow Agent       │
-│  AgentCore Runtime          │   │  AgentCore Runtime              │
-│                             │   │                                 │
-│  Runtime: SpendOptimo       │   │  Runtime: SpendOptimoWorkflow   │
-│  Model: Amazon Nova Pro     │   │  Model: Amazon Nova Lite        │
-│  Purpose: Intelligence      │   │  Purpose: Execution             │
-│                             │   │                                 │
-│  Tools:                     │   │  Tools:                         │
-│  • analyze_aws_costs        │   │  • stop_ec2_instances           │
-│  • get_cost_anomalies       │   │  • modify_ec2_instance_type     │
-│  • get_rightsizing_recs     │   │  • start_ec2_instances          │
-│  • execute_rightsizing      │   │  • apply_s3_lifecycle_policy    │
-│                             │   │  • update_lambda_concurrency    │
-│  Outputs:                   │   │  • modify_rds_instance          │
-│  • Conversational insights  │   │  • resize_ebs_volumes           │
-│  • Policy violations        │   │                                 │
-│  • Recommendations JSON     │   │  Execution:                     │
-│  • Dynamic action buttons   │   │  • Interprets recommendations   │
-│                             │   │  • Performs AWS API calls       │
-│                             │   │  • Validates changes            │
-│                             │   │  • Reports results              │
-└─────────────────────────────┘   └─────────────────────────────────┘
-              │                             │
-              ▼                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                   [AWS Services] Evidence & Actuation               │
-│                                                                     │
-│  • Cost Explorer            • Compute Optimizer                     │
-│  • CloudWatch               • EC2 / Lambda                          │
-│  • Company Policies         • S3 / Lambda / EC2                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
+### Architecture Diagram
+
+![SpendOptimo Architecture](architecture/architecture_diagram.PNG)
+
 
 ### Why Two Agents?
 
@@ -96,6 +44,7 @@ This architecture achieves **separation of intelligence from execution**, enabli
 - **Scalability** - Analysis doesn't block execution
 - **Cost optimization** - Right model for the right task
 - **Flexibility** - Swap out models or add agents independently
+
 
 ---
 
