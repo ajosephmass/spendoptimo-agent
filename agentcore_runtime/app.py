@@ -312,11 +312,9 @@ def execute_deploy_and_optimize_workflow() -> str:
 
 @tool
 def execute_rightsizing_workflow() -> str:
-    """Execute the rightsizing workflow using current agent recommendations."""
-    import boto3
+    """Execute the rightsizing workflow via Workflow Agent for ALL services (EC2, S3, Lambda)."""
     import json
     import requests
-    from datetime import datetime
     
     try:
         # Get the API URL from environment or construct it
@@ -332,18 +330,25 @@ def execute_rightsizing_workflow() -> str:
             recommendations = rec_data.get('recommendations', [])
             
             if not recommendations:
-                return "✅ No recommendations found to execute. All resources are already optimized according to company policies and usage patterns."
+                return "No recommendations found to execute. All resources are already optimized according to company policies and usage patterns."
+            
+            # Determine resource types from recommendations
+            resource_types = set()
+            for rec in recommendations:
+                resource_types.add(rec.get('resource_type', 'EC2'))
+            
+            logger.info(f"Executing workflow for resource types: {resource_types} via Workflow Agent")
                 
         except Exception as e:
-            return f"❌ Error getting recommendations: {str(e)}"
+            return f"Error getting recommendations: {str(e)}"
         
-        # Prepare the automation request with agent recommendations
+        # ALL services (EC2, S3, Lambda) go through the Workflow Agent via /v1/automation
         automation_request = {
-            "action": "optimize_existing_instances",
+            "action": "optimize_resources",
             "context": {
-                "service": "Amazon Elastic Compute Cloud - Compute",
                 "requestedBy": "agentcore_runtime",
                 "recommendations": recommendations,
+                "resource_types": list(resource_types),
                 "workflow_type": "execute_agent_recommendations"
             }
         }
@@ -356,45 +361,39 @@ def execute_rightsizing_workflow() -> str:
             timeout=30
         )
         
-        if response.status_code == 200:
+        if response.status_code == 202:
+            # Async workflow accepted
             result = response.json()
-            execution = result.get('execution', {})
+            execution_id = result.get('execution_id', 'N/A')
             
-            # Format the response
-            message = f"✅ Rightsizing workflow executed successfully!\n\n"
-            message += f"**Execution ID**: {execution.get('id', 'N/A')}\n"
+            message = f"Workflow execution started successfully!\n\n"
+            message += f"**Execution ID**: {execution_id}\n"
+            message += f"**Resource Types**: {', '.join(resource_types)}\n"
+            message += f"**Recommendations**: {len(recommendations)}\n\n"
+            message += "The Workflow Agent is processing your optimization request in the background.\n"
+            message += "This process typically takes 3-5 minutes to complete.\n\n"
             
-            if execution.get('payload', {}).get('workflow'):
-                workflow = execution['payload']['workflow']
-                
-                # Check if there are any recommendations
-                if workflow.get('action_plan', {}).get('actionPlan', {}).get('recommendations'):
-                    recommendations = workflow['action_plan']['actionPlan']['recommendations']
-                    message += f"**Found {len(recommendations)} optimization opportunity(ies):**\n"
-                    
-                    for i, rec in enumerate(recommendations, 1):
-                        message += f"{i}. {rec.get('instanceId', 'N/A')}: {rec.get('currentType', 'N/A')} → {rec.get('recommendedType', 'N/A')} (saves {rec.get('estimatedSavings', 'N/A')})\n"
-                    
-                    message += f"\n**Total Potential Savings**: {workflow['action_plan']['actionPlan'].get('totalSavings', 'N/A')}\n"
-                    message += f"**Risk Level**: {workflow['action_plan']['actionPlan'].get('riskLevel', 'N/A')}\n"
-                else:
-                    message += "**No rightsizing opportunities found** - your resources are already optimized!\n"
-                    message += "Flow executed but no resources are scheduled for rightsizing during off-peak hours.\n"
-                
-                # Add workflow status
-                if workflow.get('status') == 'completed':
-                    message += f"\n✅ **Workflow Status**: {workflow.get('message', 'Completed successfully')}"
-                else:
-                    message += f"\n⚠️ **Workflow Status**: {workflow.get('message', 'Completed with warnings')}"
-            else:
-                message += "**Workflow executed** - check the execution details for results."
+            # List what will be done per service
+            if 'EC2' in resource_types:
+                ec2_count = sum(1 for r in recommendations if r.get('resource_type') == 'EC2')
+                message += f"- **EC2**: {ec2_count} instance(s) will be stopped, modified, and restarted\n"
+            if 'Lambda' in resource_types:
+                lambda_count = sum(1 for r in recommendations if r.get('resource_type') == 'Lambda')
+                message += f"- **Lambda**: {lambda_count} function(s) configuration will be updated\n"
+            if 'S3' in resource_types:
+                s3_count = sum(1 for r in recommendations if r.get('resource_type') == 'S3')
+                message += f"- **S3**: {s3_count} bucket(s) lifecycle policies will be configured\n"
             
             return message
+        elif response.status_code == 200:
+            # Sync workflow completed (shouldn't happen but handle it)
+            result = response.json()
+            return result.get('result', {}).get('message', 'Workflow executed successfully')
         else:
-            return f"❌ Failed to execute rightsizing workflow. Status: {response.status_code}, Response: {response.text}"
+            return f"Failed to execute optimization workflow. Status: {response.status_code}, Response: {response.text}"
             
     except Exception as e:
-        return f"❌ Error executing rightsizing workflow: {str(e)}"
+        return f"Error executing rightsizing workflow: {str(e)}"
 
 # ===================================
 # Multi-Service Recommendation Checks
@@ -468,11 +467,12 @@ def execute_rightsizing_workflow() -> str:
 
 
 def check_lambda_functions():
-    """Check Lambda functions against company policies and return recommendations."""
+    """Check Lambda functions against company policies and return (recommendations, total_count)."""
     import boto3
     from company_policies import get_policy
     
     recommendations = []
+    total_functions = 0
     
     try:
         lambda_client = boto3.client('lambda')
@@ -484,7 +484,7 @@ def check_lambda_functions():
         lambda_policy = get_policy('lambda')
         if not lambda_policy:
             logger.warning("No Lambda policy found")
-            return []
+            return recommendations, total_functions
         
         max_concurrency = lambda_policy.get('reserved_concurrency', {}).get('max', 100)
         functions_over_provisioned = 0
@@ -499,12 +499,23 @@ def check_lambda_functions():
             if memory_size > 5120:  # 5GB threshold
                 logger.info(f"Lambda {function_name} is over-provisioned: {memory_size} MB > 5120 MB")
                 functions_over_provisioned += 1
+                
+                # Calculate savings based on memory reduction
+                # Lambda pricing: ~$0.0000166667 per GB-second
+                # Assume 1M invocations/month at 1s avg duration (conservative)
+                current_gb = memory_size / 1024
+                recommended_gb = 1  # 1GB
+                gb_seconds_saved = (current_gb - recommended_gb) * 1000000  # 1M seconds
+                monthly_savings = round(gb_seconds_saved * 0.0000166667, 2)
+                if monthly_savings < 5:
+                    monthly_savings = 5.0  # Minimum estimate
+                
                 recommendations.append({
                     "resource_type": "Lambda",
                     "function_name": function_name,
                     "current_memory_mb": memory_size,
                     "recommended_memory_mb": 1024,
-                    "estimated_monthly_savings": "$10.00",
+                    "estimated_monthly_savings": f"${monthly_savings:.2f}",
                     "reason": "Over-provisioned memory - most functions don't need > 5GB, recommend 1GB",
                     "confidence": "Policy-Based",
                     "recommendation_source": "Company Cost Policy"
@@ -537,67 +548,97 @@ def check_lambda_functions():
         import traceback
         logger.error(traceback.format_exc())
     
-    return recommendations
+    return recommendations, total_functions
 
 
 def check_s3_buckets():
-    """Check S3 buckets for lifecycle policies and return recommendations."""
+    """Check S3 buckets for lifecycle policies and return (recommendations, total_count)."""
     import boto3
     from botocore.exceptions import ClientError
     from company_policies import get_policy
     
     recommendations = []
+    total_buckets = 0
     
     try:
         s3 = boto3.client('s3')
         response = s3.list_buckets()
         
-        logger.info(f"Found {len(response['Buckets'])} S3 buckets to analyze")
+        total_buckets = len(response['Buckets'])
+        logger.info(f"Found {total_buckets} S3 buckets to analyze")
         
         s3_policy = get_policy('s3')
         if not s3_policy or not s3_policy.get('lifecycle_policy_required'):
             logger.info("S3 lifecycle policy not required by company policy")
-            return []
+            return recommendations, total_buckets
         
         buckets_checked = 0
         buckets_skipped = 0
         
         for bucket in response['Buckets']:
             bucket_name = bucket['Name']
+            logger.info(f"Checking bucket: {bucket_name}")
             
             # Check if lifecycle policy exists
-            has_lifecycle = False
             try:
                 lifecycle_config = s3.get_bucket_lifecycle_configuration(Bucket=bucket_name)
-                has_lifecycle = True
-                logger.info(f"Bucket {bucket_name} has lifecycle policy")
+                logger.info(f"Bucket {bucket_name} has lifecycle policy - compliant")
+                buckets_checked += 1
             except ClientError as e:
                 if e.response['Error']['Code'] == 'NoSuchLifecycleConfiguration':
-                    has_lifecycle = False
-                    logger.info(f"Bucket {bucket_name} has NO lifecycle policy - adding to recommendations")
+                    logger.info(f"Bucket {bucket_name} has NO lifecycle policy - adding recommendation")
+                    buckets_checked += 1
+                    
+                    # Try to get bucket size for better savings estimate
+                    estimated_savings = 5.0  # Conservative default if we can't get size
+                    try:
+                        cloudwatch = boto3.client('cloudwatch')
+                        from datetime import datetime, timedelta
+                        response = cloudwatch.get_metric_statistics(
+                            Namespace='AWS/S3',
+                            MetricName='BucketSizeBytes',
+                            Dimensions=[
+                                {'Name': 'BucketName', 'Value': bucket_name},
+                                {'Name': 'StorageType', 'Value': 'StandardStorage'}
+                            ],
+                            StartTime=datetime.now() - timedelta(days=1),
+                            EndTime=datetime.now(),
+                            Period=86400,
+                            Statistics=['Average']
+                        )
+                        if response['Datapoints']:
+                            size_bytes = response['Datapoints'][0]['Average']
+                            size_gb = size_bytes / (1024**3)
+                            # Estimate: 30% savings from Intelligent-Tiering (conservative)
+                            # Standard storage: ~$0.023/GB/month, Intelligent-Tiering access: ~$0.004/GB/month
+                            # Potential savings: ~$0.007/GB/month for infrequently accessed data
+                            estimated_savings = round(size_gb * 0.007, 2)
+                            # Cap at reasonable max
+                            if estimated_savings > 100:
+                                estimated_savings = 100.0
+                            elif estimated_savings < 5:
+                                estimated_savings = 5.0  # Minimum estimate
+                    except:
+                        pass  # Use default if CloudWatch metrics unavailable
+                    
+                    recommendations.append({
+                        "resource_type": "S3",
+                        "bucket_name": bucket_name,
+                        "issue": "No lifecycle policy configured",
+                        "recommended_action": "Add Intelligent-Tiering or transition to Glacier",
+                        "estimated_monthly_savings": f"${estimated_savings:.2f}",
+                        "reason": "Policy requires lifecycle management for all buckets",
+                        "confidence": "Policy-Based",
+                        "recommendation_source": "Company Cost Policy"
+                    })
+                    logger.info(f"Added recommendation for {bucket_name} (est. savings: ${estimated_savings:.2f}) - total recs: {len(recommendations)}")
                 else:
                     # Skip buckets we can't access (permissions, etc.)
-                    logger.warning(f"Skipping bucket {bucket_name}: {e.response['Error']['Code']}")
+                    logger.warning(f"Skipping bucket {bucket_name} - error: {e.response['Error']['Code']}")
                     buckets_skipped += 1
-                    continue
             except Exception as e:
-                logger.warning(f"Skipping bucket {bucket_name}: {str(e)}")
+                logger.warning(f"Skipping bucket {bucket_name} - exception: {str(e)}")
                 buckets_skipped += 1
-                continue  # Skip buckets with other errors
-            
-            buckets_checked += 1
-            
-            if not has_lifecycle:
-                recommendations.append({
-                    "resource_type": "S3",
-                    "bucket_name": bucket_name,
-                    "issue": "No lifecycle policy configured",
-                    "recommended_action": "Add Intelligent-Tiering or transition to Glacier",
-                    "estimated_monthly_savings": "$20.00",
-                    "reason": "Policy requires lifecycle management for all buckets",
-                    "confidence": "Policy-Based",
-                    "recommendation_source": "Company Cost Policy"
-                })
         
         logger.info(f"S3 Check Complete: {buckets_checked} checked, {buckets_skipped} skipped, {len(recommendations)} recommendations")
     
@@ -606,7 +647,7 @@ def check_s3_buckets():
         import traceback
         logger.error(traceback.format_exc())
     
-    return recommendations
+    return recommendations, total_buckets
 
 
 # FUTURE ENHANCEMENT - EBS Optimization
@@ -771,7 +812,7 @@ def get_rightsizing_recommendations(resource_types: str = "EC2,Lambda,S3", accou
                         if any(pv['instance_id'] == instance_id for pv in policy_violations):
                             continue
                         
-                    if rec.get('recommendationOptions'):
+                        if rec.get('recommendationOptions'):
                             best_option = rec['recommendationOptions'][0]
                             savings = best_option.get('savingsOpportunity', {}).get('estimatedMonthlySavings', {})
                             savings_value = float(savings.get('value', 0))
@@ -785,17 +826,17 @@ def get_rightsizing_recommendations(resource_types: str = "EC2,Lambda,S3", accou
                             total_savings += savings_value
                             
                             recommendations.append({
-                            "resource_type": "EC2",
+                                "resource_type": "EC2",
                                 "instance_id": instance_id,
-                            "current_instance_type": rec.get('currentInstanceType', 'N/A'),
+                                "current_instance_type": rec.get('currentInstanceType', 'N/A'),
                                 "recommended_instance_type": recommended_type,
-                            "estimated_monthly_savings": f"${savings_value:.2f}",
-                            "confidence": best_option.get('rank', 'N/A'),
+                                "estimated_monthly_savings": f"${savings_value:.2f}",
+                                "confidence": best_option.get('rank', 'N/A'),
                                 "recommendation_source": "Compute Optimizer",
-                            "utilization_metrics": {
-                                "cpu": f"{rec.get('utilizationMetrics', {}).get('cpuUtilization', {}).get('value', 0):.1f}%",
-                                "memory": f"{rec.get('utilizationMetrics', {}).get('memoryUtilization', {}).get('value', 0):.1f}%"
-                            }
+                                "utilization_metrics": {
+                                    "cpu": f"{rec.get('utilizationMetrics', {}).get('cpuUtilization', {}).get('value', 0):.1f}%",
+                                    "memory": f"{rec.get('utilizationMetrics', {}).get('memoryUtilization', {}).get('value', 0):.1f}%"
+                                }
                             })
                 except Exception as e:
                     # Compute Optimizer data not available - that's OK, we have policy-based recommendations
@@ -822,10 +863,11 @@ def get_rightsizing_recommendations(resource_types: str = "EC2,Lambda,S3", accou
         #         savings_val = float(savings_str.replace("$", "").replace(",", ""))
         #         total_savings += savings_val
         
+        lambda_total_count = 0
         if 'Lambda' in resource_types:
             logger.info("Starting Lambda function check...")
-            lambda_recs = check_lambda_functions()
-            logger.info(f"Lambda check returned {len(lambda_recs)} recommendations")
+            lambda_recs, lambda_total_count = check_lambda_functions()
+            logger.info(f"Lambda check returned {len(lambda_recs)} recommendations from {lambda_total_count} functions")
             all_recommendations.extend(lambda_recs)
             service_summary["Lambda"] = len(lambda_recs)
             # Add savings from Lambda
@@ -834,10 +876,11 @@ def get_rightsizing_recommendations(resource_types: str = "EC2,Lambda,S3", accou
                 savings_val = float(savings_str.replace("$", "").replace(",", ""))
                 total_savings += savings_val
         
+        s3_total_count = 0
         if 'S3' in resource_types:
             logger.info("Starting S3 bucket check...")
-            s3_recs = check_s3_buckets()
-            logger.info(f"S3 check returned {len(s3_recs)} recommendations")
+            s3_recs, s3_total_count = check_s3_buckets()
+            logger.info(f"S3 check returned {len(s3_recs)} recommendations from {s3_total_count} buckets")
             all_recommendations.extend(s3_recs)
             service_summary["S3"] = len(s3_recs)
             # Add savings from S3
@@ -864,8 +907,8 @@ def get_rightsizing_recommendations(resource_types: str = "EC2,Lambda,S3", accou
         # Build comprehensive resource inventory
         resource_inventory = {
             "total_running_instances": len(running_instances) if 'EC2' in resource_types and 'running_instances' in locals() else 0,
-            "total_lambda_functions": service_summary.get("Lambda", 0),
-            "total_s3_buckets": service_summary.get("S3", 0),
+            "total_lambda_functions": lambda_total_count if 'Lambda' in resource_types else 0,
+            "total_s3_buckets": s3_total_count if 'S3' in resource_types else 0,
             "instances_by_type": {},
             "policy_compliant_count": 0,
             "policy_violating_count": 0,
@@ -966,7 +1009,12 @@ def _build_agent() -> Agent:
         "- When users ask about cost analysis, trends, or anomalies, use the appropriate tools to provide data-driven insights. DO NOT show any buttons for these queries.\n"
         "- When users ask about rightsizing, optimization, instance recommendations, or cost savings opportunities:\n"
         "  1. ALWAYS use get_rightsizing_recommendations to check company policies and resource compliance\n"
-        "  2. Write a CONVERSATIONAL, well-explained response (not just bullet points). Include:\n"
+        "  2. IMPORTANT - Set resource_types parameter based on user query:\n"
+        "     - If asking about EC2/instances only -> resource_types='EC2'\n"
+        "     - If asking about Lambda functions only -> resource_types='Lambda'\n"
+        "     - If asking about S3 buckets only -> resource_types='S3'\n"
+        "     - If asking about all services -> resource_types='EC2,Lambda,S3'\n"
+        "  3. Write a CONVERSATIONAL, well-explained response (not just bullet points). Include:\n"
         "     - Opening statement about what you found\n"
         "     - Resource inventory in natural language (e.g., 'I found 5 running EC2 instances...')\n"
         "     - Policy violations explained clearly with context\n"
@@ -983,6 +1031,13 @@ def _build_agent() -> Agent:
         "- Company cost policies are the PRIMARY source of recommendations. Compute Optimizer metrics provide additional insights.\n"
         "- If resources violate company policy (e.g., R5 instances when only T3 allowed), explain WHY the policy exists and what the impact is.\n"
         "- Even when everything is compliant, write a positive, detailed response explaining what was checked and why it's good.\n"
+        "- When execute_rightsizing_workflow is called, provide an intelligent response based on the resource types being optimized:\n"
+        "  - For EC2: Mention stop/modify/restart instance workflow\n"
+        "  - For Lambda: Mention updating function configuration (memory/concurrency)\n"
+        "  - For S3: Mention configuring lifecycle policies for buckets\n"
+        "  - For mixed services: List all actions being performed\n"
+        "  - ALWAYS include the execution ID and estimated completion time\n"
+        "  - NEVER use static messages - tailor response to actual recommendations\n"
         "- DO NOT show the 'Deploy and Optimize Demo' button unless specifically requested by the user.\n"
         "- Be conversational, helpful, and specific. Avoid overly technical jargon.\n"
         "- Always explain the business impact of recommendations."

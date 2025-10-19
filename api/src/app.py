@@ -221,12 +221,61 @@ async def automation(request: Request) -> JSONResponse:
                 # Create execution ID
                 execution_id = f"workflow-{int(time.time() * 1000)}"
                 
+                # Generate execution plan summary from recommendations
+                resource_summary = {}
+                for rec in recommendations:
+                    rtype = rec.get('resource_type', 'EC2')
+                    if rtype not in resource_summary:
+                        resource_summary[rtype] = []
+                    resource_summary[rtype].append(rec)
+                
+                execution_plan = "**Execution Plan:**\n\n"
+                
+                # EC2 summary
+                if 'EC2' in resource_summary:
+                    execution_plan += f"**EC2 Instances ({len(resource_summary['EC2'])}):**\n"
+                    for rec in resource_summary['EC2'][:3]:  # Show first 3
+                        execution_plan += f"- Stop instance `{rec.get('instance_id', 'N/A')}`, modify from `{rec.get('current_instance_type', 'N/A')}` to `{rec.get('recommended_instance_type', 'N/A')}`, restart and verify\n"
+                    if len(resource_summary['EC2']) > 3:
+                        execution_plan += f"- ... and {len(resource_summary['EC2']) - 3} more instance(s)\n"
+                    execution_plan += "\n"
+                
+                # S3 summary
+                if 'S3' in resource_summary:
+                    execution_plan += f"**S3 Buckets ({len(resource_summary['S3'])}):**\n"
+                    for rec in resource_summary['S3'][:3]:  # Show first 3
+                        execution_plan += f"- Apply Intelligent-Tiering lifecycle policy to bucket `{rec.get('bucket_name', 'N/A')}`\n"
+                    if len(resource_summary['S3']) > 3:
+                        execution_plan += f"- ... and {len(resource_summary['S3']) - 3} more bucket(s)\n"
+                    execution_plan += "\n"
+                
+                # Lambda summary
+                if 'Lambda' in resource_summary:
+                    execution_plan += f"**Lambda Functions ({len(resource_summary['Lambda'])}):**\n"
+                    for rec in resource_summary['Lambda'][:3]:  # Show first 3
+                        changes = []
+                        if 'recommended_memory_mb' in rec:
+                            changes.append(f"memory: {rec.get('current_memory_mb', 'N/A')}MB → {rec['recommended_memory_mb']}MB")
+                        if 'recommended_concurrency' in rec:
+                            changes.append(f"concurrency: {rec.get('current_concurrency', 'N/A')} → {rec['recommended_concurrency']}")
+                        execution_plan += f"- Update function `{rec.get('function_name', 'N/A')}` ({', '.join(changes)})\n"
+                    if len(resource_summary['Lambda']) > 3:
+                        execution_plan += f"- ... and {len(resource_summary['Lambda']) - 3} more function(s)\n"
+                    execution_plan += "\n"
+                
+                # Total savings
+                total_savings = sum(
+                    float(rec.get('estimated_monthly_savings', '$0').replace('$', '').replace(',', ''))
+                    for rec in recommendations
+                )
+                execution_plan += f"**Estimated Total Monthly Savings:** ${total_savings:.2f}"
+                
+                logger.info(f"Generated execution plan for {execution_id}: {len(recommendations)} recommendations")
+                
                 # Start workflow execution in background using Lambda async invocation
                 logger.info(f"Starting async workflow execution: {execution_id}")
                 
-                # We'll invoke ourselves asynchronously with a special flag
                 lambda_client = boto3.client('lambda')
-                import os
                 current_function = os.environ.get('AWS_LAMBDA_FUNCTION_NAME', 'SpendOptimoApiFn')
                 
                 # Prepare async payload
@@ -246,15 +295,17 @@ async def automation(request: Request) -> JSONResponse:
                 
                 logger.info(f"Async workflow invocation sent: {execution_id}")
                 
-                # Return immediately with 202 Accepted
+                # Return immediately with 202 Accepted and the execution plan
+                final_message = f"{execution_plan}\n\n---\n\n**Status:** Workflow execution in progress  \n**Estimated Time:** 3-5 minutes\n\nThe Workflow Agent is processing your optimizations in the background."
+                
                 return JSONResponse({
                     "brand": "SpendOptimoWorkflow",
                     "status": "accepted",
                     "execution_id": execution_id,
                     "result": {
-                        "message": f"✅ Workflow execution started for {len(recommendations)} recommendation(s).\n\nThe workflow is running in the background and will:\n1. Stop each instance\n2. Modify instance type\n3. Restart instance\n4. Verify changes\n\nThis process typically takes 3-5 minutes to complete. You can check your EC2 console to monitor progress.",
+                        "message": final_message,
                         "recommendations_processed": len(recommendations),
-                        "execution_details": "Workflow is running asynchronously in the background.",
+                        "execution_details": execution_plan,
                         "status": "in_progress"
                     },
                 }, status_code=202, headers=_cors_headers())
@@ -313,10 +364,12 @@ def handler(event, context):
             
             # Invoke workflow agent with recommendations
             prompt = json.dumps(recommendations, indent=2)
-            logger.info(f"Invoking workflow agent for execution {execution_id}")
+            logger.info(f"Invoking workflow agent for execution {execution_id} with {len(recommendations)} recommendations")
+            logger.info(f"Recommendation types: {set(r.get('resource_type') for r in recommendations)}")
             response = workflow_gateway.invoke(goal=prompt, bearer_token=bearer_token)
             
             logger.info(f"Workflow execution {execution_id} completed successfully")
+            logger.info(f"Workflow response: {str(response)[:300]}...")
             return {
                 "statusCode": 200,
                 "body": json.dumps({
@@ -381,3 +434,4 @@ def _split_csv(raw: Optional[str]) -> Optional[Iterable[str]]:
         return None
     values = [item.strip() for item in raw.split(",") if item.strip()]
     return values or None
+

@@ -139,8 +139,9 @@ def ec2_verify_instance_type(instance_id: str, expected_type: str) -> str:
 # ================================
 
 @tool
-def s3_put_lifecycle_policy(bucket_name: str, transition_days: int, storage_class: str) -> str:
+def s3_put_lifecycle_policy(bucket_name: str, transition_days: int = 0, storage_class: str = "INTELLIGENT_TIERING") -> str:
     """Apply a lifecycle policy to an S3 bucket to transition objects to a different storage class.
+    For Intelligent-Tiering, use transition_days=0 to apply immediately.
     Returns success message or error."""
     import boto3
     from botocore.exceptions import ClientError
@@ -152,8 +153,9 @@ def s3_put_lifecycle_policy(bucket_name: str, transition_days: int, storage_clas
         
         lifecycle_config = {
             'Rules': [{
-                'Id': f'transition-to-{storage_class}',
+                'ID': 'SpendOptimo-IntelligentTiering',
                 'Status': 'Enabled',
+                'Filter': {},  # Apply to all objects
                 'Transitions': [{
                     'Days': transition_days,
                     'StorageClass': storage_class
@@ -166,18 +168,48 @@ def s3_put_lifecycle_policy(bucket_name: str, transition_days: int, storage_clas
             LifecycleConfiguration=lifecycle_config
         )
         
-        return f"✅ Successfully applied lifecycle policy to bucket {bucket_name}: transition to {storage_class} after {transition_days} days"
+        logger.info(f"Successfully applied lifecycle policy to {bucket_name}")
+        return f"Successfully applied lifecycle policy to bucket {bucket_name}: transition to {storage_class} after {transition_days} days"
     except ClientError as e:
         error_code = e.response['Error']['Code']
         error_msg = e.response['Error']['Message']
-        return f"❌ Failed to apply lifecycle policy to {bucket_name}: {error_code} - {error_msg}"
+        logger.error(f"Failed to apply lifecycle policy to {bucket_name}: {error_code} - {error_msg}")
+        return f"Failed to apply lifecycle policy to {bucket_name}: {error_code} - {error_msg}"
     except Exception as e:
-        return f"❌ Error applying lifecycle policy: {str(e)}"
+        logger.error(f"Error applying lifecycle policy to {bucket_name}: {str(e)}")
+        return f"Error applying lifecycle policy: {str(e)}"
 
 
 # ================================
 # Lambda Tools
 # ================================
+
+@tool
+def lambda_update_memory(function_name: str, memory_size_mb: int) -> str:
+    """Update Lambda function memory size. Returns success message or error."""
+    import boto3
+    from botocore.exceptions import ClientError
+    
+    try:
+        region = os.getenv('AWS_REGION', 'us-east-1')
+        lambda_client = boto3.client('lambda', region_name=region)
+        logger.info(f"Updating Lambda function {function_name} memory to {memory_size_mb}MB")
+        
+        lambda_client.update_function_configuration(
+            FunctionName=function_name,
+            MemorySize=memory_size_mb
+        )
+        
+        return f"Successfully updated Lambda function {function_name} memory to {memory_size_mb}MB"
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        error_msg = e.response['Error']['Message']
+        logger.error(f"Failed to update Lambda {function_name} memory: {error_code} - {error_msg}")
+        return f"Failed to update Lambda {function_name}: {error_code} - {error_msg}"
+    except Exception as e:
+        logger.error(f"Error updating Lambda memory: {str(e)}")
+        return f"Error updating Lambda memory: {str(e)}"
+
 
 @tool
 def lambda_update_concurrency(function_name: str, reserved_concurrent_executions: int) -> str:
@@ -291,23 +323,18 @@ def _build_workflow_agent() -> Agent:
         "- RDS: Modify database instance classes\n"
         "- EBS: Modify volume types and sizes\n\n"
         
-        "When you receive recommendations:\n"
+        "When you receive recommendations, execute them immediately:\n"
         "1. Process each recommendation based on its resource_type\n"
         "2. For EC2 rightsizing: stop → modify → start → verify\n"
-        "3. For S3: apply lifecycle policy\n"
-        "4. For Lambda: update concurrency\n"
+        "3. For S3: Use s3_put_lifecycle_policy(bucket_name, transition_days=0, storage_class='INTELLIGENT_TIERING')\n"
+        "4. For Lambda memory: Use lambda_update_memory(function_name, memory_size_mb)\n"
+        "5. For Lambda concurrency: Use lambda_update_concurrency(function_name, reserved_concurrent_executions)\n"
         "5. For RDS: modify instance class\n"
         "6. For EBS: modify volume type/size\n"
         "7. Provide clear status for EACH recommendation\n"
         "8. If a step fails, explain why and suggest next steps\n\n"
         
-        "Always be clear about:\n"
-        "- What you're doing\n"
-        "- Why you're doing it\n"
-        "- The result of each action\n"
-        "- Any errors encountered and how you handled them\n\n"
-        
-        "Format your response with:\n"
+        "Format your final response with:\n"
         "- Summary of what was executed\n"
         "- Status for each recommendation (success/failed)\n"
         "- Total savings achieved\n"
@@ -325,6 +352,7 @@ def _build_workflow_agent() -> Agent:
             # S3 tools
             s3_put_lifecycle_policy,
             # Lambda tools
+            lambda_update_memory,
             lambda_update_concurrency,
             # RDS tools
             rds_modify_instance,
@@ -417,25 +445,26 @@ def execute_workflow(request: RequestContext) -> Dict[str, Any]:
         }
     
     # Build a prompt for the workflow agent
-    prompt = f"""I need you to execute {len(recommendations)} AWS optimization recommendations.
-
-Here are the recommendations:
+    prompt = f"""Execute these {len(recommendations)} AWS optimization recommendations:
 
 {json.dumps(recommendations, indent=2)}
 
-For each recommendation:
-1. Identify the resource type and action needed
-2. Use your tools to apply the changes
-3. Report the status
+CRITICAL INSTRUCTIONS:
+- For S3 recommendations: Extract bucket_name and call s3_put_lifecycle_policy(bucket_name, 0, 'INTELLIGENT_TIERING')
+- For Lambda memory recommendations: Extract function_name and recommended_memory_mb, call lambda_update_memory(function_name, memory_size_mb)
+- For Lambda concurrency recommendations: Extract function_name and recommended_concurrency, call lambda_update_concurrency(function_name, reserved_concurrent_executions)
+- For EC2 recommendations: stop → modify → start → verify sequence
 
-Process all recommendations and provide a summary."""
+Process ALL recommendations and report results for each one."""
     
     try:
+        logger.info(f"Starting workflow agent execution for {len(recommendations)} recommendations")
         agent = _get_agent()
         response = agent(prompt)
         result_text = response.message["content"][0]["text"]
         
-        logger.info(f"Workflow agent completed execution")
+        logger.info(f"Workflow agent completed execution. Response length: {len(result_text)}")
+        logger.info(f"Workflow agent response preview: {result_text[:200]}...")
         
         return {
             "status": "success",

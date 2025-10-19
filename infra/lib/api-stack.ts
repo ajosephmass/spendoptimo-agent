@@ -7,7 +7,6 @@ import * as codebuild from 'aws-cdk-lib/aws-codebuild';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as cr from 'aws-cdk-lib/custom-resources';
 import * as iam from 'aws-cdk-lib/aws-iam';
-import * as stepfunctions from 'aws-cdk-lib/aws-stepfunctions';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import * as crypto from 'crypto';
@@ -140,7 +139,6 @@ export class ApiStack extends Stack {
         AGENTCORE_ALIAS_PARAM: '/spendoptimo/agentcore/alias',
         AGENTCORE_INVOKE_PARAM: '/spendoptimo/agentcore/invoke-arn',
         AGENTCORE_ROLE_PARAM: '/spendoptimo/agentcore/role-arn',
-        STRANDS_STATE_MACHINE_ARN: '', // Will be updated after state machine is created
       },
     });
     apiFn.node.addDependency(buildResource);
@@ -223,14 +221,6 @@ export class ApiStack extends Stack {
     }));
     apiFn.addToRolePolicy(new iam.PolicyStatement({
       actions: [
-        'states:StartExecution',
-        'states:DescribeExecution',
-        'states:DescribeStateMachine',
-      ],
-      resources: ['*'],
-    }));
-    apiFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: [
         'scheduler:CreateSchedule',
         'scheduler:UpdateSchedule',
         'scheduler:DeleteSchedule',
@@ -294,36 +284,8 @@ export class ApiStack extends Stack {
     plan.addApiStage({ api: this.api, stage: this.api.deploymentStage });
     plan.addApiKey(key);
 
-    // Create Step Functions state machine for automation workflows
-    // Use a simple pass state to avoid circular dependency for now
-    const stateMachine = new stepfunctions.StateMachine(this, 'SpendOptimoAutomationStateMachine', {
-      stateMachineName: 'SpendOptimoAutomation',
-      definition: new stepfunctions.Pass(this, 'AutomationPass', {
-        result: stepfunctions.Result.fromObject({
-          message: 'Strands workflow executed successfully',
-          timestamp: new Date().toISOString(),
-          workflow: [
-            'collect_cost_evidence',
-            'collect_optimizer_signals', 
-            'draft_action_plan',
-            'approve_plan',
-            'apply_fix',
-            'verify_outcome'
-          ]
-        })
-      }),
-      timeout: Duration.minutes(15),
-    });
-
-    // Grant the API Lambda permission to start executions
-    stateMachine.grantStartExecution(apiFn);
-
-    // Update the Lambda environment variable with the state machine ARN
-    apiFn.addEnvironment('STRANDS_STATE_MACHINE_ARN', stateMachine.stateMachineArn);
-
     new CfnOutput(this, 'ApiUrl', { value: this.api.url });
     new CfnOutput(this, 'ApiKey', { value: this.apiKeyValue });
-    new CfnOutput(this, 'StateMachineArn', { value: stateMachine.stateMachineArn });
   }
 
 

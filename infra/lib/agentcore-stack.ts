@@ -234,9 +234,14 @@ export class AgentCoreStack extends Stack {
         'rds:DescribeDBInstances',
         'rds:DescribeDBClusters',
         'lambda:ListFunctions',
+        'lambda:GetFunctionConfiguration',
+        'lambda:GetFunctionConcurrency',
         'autoscaling:DescribeAutoScalingGroups',
         's3:ListAllMyBuckets',
-        's3:GetBucketLocation'
+        's3:GetBucketLocation',
+        's3:GetLifecycleConfiguration',
+        's3:GetBucketTagging',
+        'cloudwatch:GetMetricStatistics'
       ],
       resources: ['*'],
     }));
