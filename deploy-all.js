@@ -59,7 +59,7 @@ function checkPrerequisites() {
     { cmd: 'node --version', name: 'Node.js', min: '18.0.0' },
     { cmd: 'python --version', name: 'Python', min: '3.11' },
     { cmd: 'aws --version', name: 'AWS CLI', min: '2.0' },
-    { cmd: 'cdk --version', name: 'AWS CDK', min: '2.0' },
+    { cmd: 'npx cdk --version', name: 'AWS CDK', min: '2.0' },
     { cmd: 'docker --version', name: 'Docker', optional: true },
   ];
 

@@ -173,7 +173,7 @@ spendoptimo/
 | **Frontend** | React + Vite | Modern, fast web interface |
 | **Infrastructure** | AWS CDK v2 (TypeScript) | Infrastructure as code |
 | **Authentication** | Amazon Cognito | User identity and JWT tokens |
-| **Storage** | CloudFront + S3 | Static site hosting |
+| **CDN+UI** | CloudFront + S3 | Static site hosting |
 | **Container Registry** | Amazon ECR | Docker image storage for Lambda |
 
 ### AWS Services Used
