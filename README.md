@@ -228,6 +228,24 @@ This script will:
 
 **Estimated deployment time:** 15-20 minutes (mostly building Docker images)
 
+### Post-Deployment Setup
+
+After deployment completes, create a test user for authentication:
+
+```bash
+# Get your User Pool ID from the deployment output, then create a test user
+aws cognito-idp admin-create-user \
+  --user-pool-id <your-user-pool-id> \
+  --username <test-email@example.com> \
+  --user-attributes Name=email,Value=<test-email@example.com> Name=email_verified,Value=true \
+  --temporary-password '<YourTempPassword123!>'
+```
+
+**Note:** Replace the placeholders with:
+- `<your-user-pool-id>`: Found in deployment output or CloudFormation stack outputs
+- `<test-email@example.com>`: Your test email address
+- `<YourTempPassword123!>`: A temporary password (user will be prompted to change on first login)
+
 ### Manual Deployment (Step-by-Step)
 
 If you prefer manual control:
@@ -263,14 +281,23 @@ node deploy-ui.js
 
 Navigate to your CloudFront URL (output from deployment):
 ```
-https://d293f08cklhjup.cloudfront.net
+https://<your-cloudfront-distribution-id>.cloudfront.net
 ```
 
 ### 2. Authenticate
 
 1. Click **"Sign in with Cognito"**
-2. Create an account or sign in
+2. Create an account or sign in (see setup instructions below)
 3. Your ID token is automatically saved in the session
+
+**Create a test user** (replace placeholders with your values):
+```bash
+aws cognito-idp admin-create-user \
+  --user-pool-id <your-user-pool-id> \
+  --username <test-email@example.com> \
+  --user-attributes Name=email,Value=<test-email@example.com> Name=email_verified,Value=true \
+  --temporary-password '<YourTempPassword123!>'
+```
 
 ### 3. Ask Questions
 
@@ -502,6 +529,8 @@ This creates an `r5.large` instance (violates policy → should recommend `t3.me
 
 **Both agents share the same Cognito User Pool** for seamless authentication.
 
+**User Pool ID:** `<your-user-pool-id>` (found in deployment outputs)
+
 ---
 
 ## 🤖 Agent Details
@@ -574,17 +603,17 @@ Returns natural language summary
 
 **Analysis Agent Logs:**
 ```
-/aws/bedrock-agentcore/SpendOptimo-bFMEwZGAVW
+/aws/bedrock-agentcore/SpendOptimo-<agent-id>
 ```
 
 **Workflow Agent Logs:**
 ```
-/aws/bedrock-agentcore/SpendOptimoWorkflow-7lNTl14agv
+/aws/bedrock-agentcore/SpendOptimoWorkflow-<agent-id>
 ```
 
 **API Lambda Logs:**
 ```
-/aws/lambda/SpendOptimoApi-SpendOptimoApiFn-*
+/aws/lambda/SpendOptimoApi-SpendOptimoApiFn-<random-suffix>
 ```
 
 ### Useful Log Queries
