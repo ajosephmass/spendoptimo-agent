@@ -10,7 +10,7 @@ Traditional FinOps tools give you dashboards. **SpendOptimo gives you an AI co-p
 
 - **Analyzes** your AWS infrastructure using company policies, AWS Compute Optimizer, and cost trends
 - **Converses** with you in natural language about optimization opportunities
-- **Executes** approved recommendations autonomously across EC2, RDS, S3, Lambda, and EBS
+- **Executes** approved recommendations autonomously across AWS Services
 - **Verifies** every change it makes, ensuring safety and compliance
 
 **The magic?** Two specialized AI agents working in tandem—one for intelligence, one for execution.
@@ -23,23 +23,23 @@ SpendOptimo uses a **separation of concerns** approach with two distinct AgentCo
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    [CloudFront] User Interface                       │
+│                    [CloudFront] User Interface                      │
 │                       React + Vite + Cognito                        │
-│                                                                       │
-│  • Conversational chat interface                                     │
-│  • AWS Cognito authentication                                        │
-│  • Dynamic action buttons                                            │
-│  • Real-time workflow status                                         │
-└───────────────────────────────┬───────────────────────────────────────┘
+│                                                                     │
+│  • Conversational chat interface                                    │
+│  • AWS Cognito authentication                                       │
+│  • Dynamic action buttons                                           │
+│  • Real-time workflow status                                        │
+└───────────────────────────────┬─────────────────────────────────────┘
                                 │
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│              [API Gateway + Lambda] Orchestrator                     │
+│              [API Gateway + Lambda] Orchestrator                    │
 │                    Python + Starlette + Mangum                      │
-│                                                                       │
-│  Routes:                                                              │
+│                                                                     │
+│  Routes:                                                            │
 │  • POST /v1/chat        → Analysis Agent                            │
-│  • GET  /v1/analyze     → Cost Explorer direct                       │
+│  • GET  /v1/analyze     → Cost Explorer direct                      │
 │  • POST /v1/automation  → Workflow Agent                            │
 └─────────────┬─────────────────────────────┬─────────────────────────┘
               │                             │
@@ -70,11 +70,11 @@ SpendOptimo uses a **separation of concerns** approach with two distinct AgentCo
               │                             │
               ▼                             ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                   [AWS Services] Evidence & Actuation                │
-│                                                                       │
-│  • Cost Explorer            • Compute Optimizer                      │
-│  • CloudWatch               • EC2 / RDS / Lambda                     │
-│  • Company Policies         • S3 / EBS                               │
+│                   [AWS Services] Evidence & Actuation               │
+│                                                                     │
+│  • Cost Explorer            • Compute Optimizer                     │
+│  • CloudWatch               • EC2 / Lambda                          │
+│  • Company Policies         • S3 / Lambda / EC2                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -89,7 +89,7 @@ SpendOptimo uses a **separation of concerns** approach with two distinct AgentCo
 **Workflow Agent (Nova Lite):**
 - Lower latency, lower cost for repetitive execution tasks
 - Receives structured recommendations and executes them
-- Service-agnostic intelligence - can handle EC2, S3, RDS, Lambda, etc.
+- Service-agnostic intelligence - can handle EC2, S3, Lambda, etc.
 - Runs asynchronously in the background
 
 This architecture achieves **separation of intelligence from execution**, enabling:
@@ -237,7 +237,6 @@ spendoptimo/
 - **IAM** - Security and permissions
 - **API Gateway** - HTTP endpoints
 - **Lambda** - Serverless compute
-- **Step Functions** - Workflow state machines (legacy, being phased out)
 - **Systems Manager (SSM)** - Parameter store for configuration
 
 ---
@@ -394,7 +393,7 @@ sequenceDiagram
 ```
 "You receive recommendations as JSON. Your job:
 1. Parse and understand what needs to be done
-2. Use your tools to execute changes (EC2, S3, RDS, Lambda, EBS)
+2. Use your tools to execute changes (EC2, S3, Lambda)
 3. Verify each change was successful
 4. Report results in natural language"
 ```
@@ -518,12 +517,6 @@ This creates an `r5.large` instance (violates policy → should recommend `t3.me
 "Which S3 buckets should use lifecycle policies?"
 ```
 
-**RDS:**
-```
-"Check my RDS instances for rightsizing opportunities"
-"Are my databases oversized?"
-```
-
 **Lambda:**
 ```
 "Optimize my Lambda functions for cost"
@@ -610,8 +603,6 @@ This creates an `r5.large` instance (violates policy → should recommend `t3.me
 - `verify_ec2_instance_type` - Confirm changes
 - `apply_s3_lifecycle_policy` - Update S3 lifecycle
 - `update_lambda_concurrency` - Adjust Lambda settings
-- `modify_rds_instance` - Resize RDS instances
-- `resize_ebs_volume` - Modify EBS volumes
 
 **Execution Pattern:**
 ```
@@ -792,7 +783,7 @@ SpendOptimo implements industry best practices:
 - **CloudWatch logging** for audit trail
 
 ### 4. **Service-Agnostic Design**
-- Same workflow pattern for EC2, RDS, Lambda, S3
+- Same workflow pattern for EC2, Lambda, S3
 - Workflow Agent interprets any recommendation type
 - Easy to extend to new services
 
@@ -895,7 +886,7 @@ View full responses in the UI by clicking "Show Details" under each message.
 - ✅ **Conversational intelligence** - Ask questions, get answers
 - ✅ **Automated execution** - One click to optimize
 - ✅ **Policy enforcement** - Codified rules, not suggestions
-- ✅ **Multi-service coverage** - EC2, RDS, S3, Lambda, EBS
+- ✅ **Multi-service coverage** - EC2, S3, Lambda, etc
 - ✅ **Autonomous agents** - Runs 24/7, never sleeps
 
 ### Real-World Impact
@@ -943,8 +934,5 @@ MIT License - See LICENSE file
 
 **SpendOptimo** - *Where AI meets FinOps*
 
-*Built by developers, for developers.*
-
-[⭐ Star this repo](https://github.com/yourusername/spendoptimo) | [📖 Documentation](./docs) | [🐛 Report Bug](https://github.com/yourusername/spendoptimo/issues)
 
 </div>
